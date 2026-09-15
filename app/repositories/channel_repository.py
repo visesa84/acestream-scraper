@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.exc import SQLAlchemyError
 import logging
+from app.repositories.tv_channel_repository import TVChannelRepository
 from ..models import AcestreamChannel
 from ..extensions import db
 from .base import BaseRepository
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 class ChannelRepository(BaseRepository[AcestreamChannel]):
     def __init__(self):
         super().__init__(AcestreamChannel)
+        self.tv_repo = TVChannelRepository()
         
     def get_by_id(self, channel_id: str) -> Optional[AcestreamChannel]:
         """Get a channel by ID."""
@@ -103,20 +105,33 @@ class ChannelRepository(BaseRepository[AcestreamChannel]):
             logger.error(f"Error deleting channels for source {source_url}: {e}")
             return False
 
-    def update_or_create(self, channel_id: str, name: str, source_url: str = None, metadata: dict = None) -> AcestreamChannel:
-        """Update an existing channel or create a new one."""
+    def update_or_create(self, channel_id: str, name: str, source_url: str = None, metadata: dict = None, tv_channel_id: int = None) -> AcestreamChannel:
+        """Update an existing channel or create a new one, linking TVChannel automatically."""
+        from datetime import datetime
+        from app.repositories.tv_channel_repository import TVChannelRepository
+
         channel = self.model.query.filter_by(id=channel_id).first()
         
+        # Buscar coincidencia automática con TVChannel si no se pasa uno explícito o el canal no tiene asignado uno
+        if not tv_channel_id and (not channel or not channel.tv_channel_id):
+            tv_repo = TVChannelRepository()
+            matched_tv = tv_repo.find_matching_channel(name)
+            if matched_tv:
+                tv_channel_id = matched_tv.id
+
         if channel:
             channel.name = name
             if source_url:
                 channel.source_url = source_url
+            if tv_channel_id and not getattr(channel, 'epg_update_protected', False):
+                channel.tv_channel_id = tv_channel_id
             channel.last_updated = datetime.now()
         else:
             channel = self.model(
                 id=channel_id,
                 name=name,
                 source_url=source_url,
+                tv_channel_id=tv_channel_id,
                 status='active',
                 is_online=False,
             )

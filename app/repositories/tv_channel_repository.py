@@ -438,3 +438,67 @@ class TVChannelRepository:
         except Exception as e:
             db.session.rollback()
             raise e
+            
+    def find_matching_channel(self, incoming_name: str) -> Optional[TVChannel]:
+        """Busca un TVChannel comparando las palabras clave sin confundir canales similares."""
+        if not incoming_name:
+            return None
+
+        import re
+
+        def extract_words(text: str) -> set:
+            if not text:
+                return set()
+            t = text.lower()
+            # 1. Eliminar URLs y dominios
+            t = re.sub(r'https?://\S+|www\.\S+|\b[\w-]+\.(?:com|online|blog|es|net|org|tv|site|me|io|xyz|top)\b', '', t)
+            # 2. Eliminar corchetes, paréntesis, flechas y separadores
+            t = re.sub(r'\[.*?\]|\(.*?\)|-->|->|\|', ' ', t)
+            # 3. Eliminar etiquetas de calidad y resolución
+            ignore_pattern = r'\b(hd|fhd|uhd|sd|4k|1080p|720p|es|sp|esp|spain|opcion\s*\d*|option\s*\d*|multi\s*\d*|stream|v2)\b'
+            t = re.sub(ignore_pattern, '', t)
+            # 4. Extraer palabras alfanuméricas
+            return set(re.findall(r'\b[a-z0-9]+\b', t))
+
+        stream_words = extract_words(incoming_name)
+        if not stream_words:
+            return None
+
+        active_channels = self.get_all(is_active=True)
+        
+        # Recopilar todas las palabras que identifican a canales en tu Base de Datos
+        all_db_channel_words = set()
+        channel_word_map = []
+
+        for tv in active_channels:
+            targets = [tv.name]
+            if hasattr(tv, 'tvg_name') and tv.tvg_name:
+                targets.append(tv.tvg_name)
+
+            for target in targets:
+                words = extract_words(target)
+                if words:
+                    all_db_channel_words.update(words)
+                    channel_word_map.append((words, tv))
+
+        candidates = []
+
+        for tv_words, tv_obj in channel_word_map:
+            # 1. Todas las palabras del TVChannel deben estar en el título del AceStream
+            if tv_words.issubset(stream_words):
+                leftover_words = stream_words - tv_words
+                
+                # 2. Si sobran palabras, comprobar si alguna pertenece a OTRO canal de la BD
+                conflicting_words = leftover_words.intersection(all_db_channel_words)
+                
+                # Si las palabras sobrantes no pertenecen a ningún canal conocido, se acepta
+                if not conflicting_words:
+                    candidates.append((len(tv_words), tv_obj))
+
+        if candidates:
+            # Priorizar el canal que coincida con más palabras
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            return candidates[0][1]
+
+        return None
+        
