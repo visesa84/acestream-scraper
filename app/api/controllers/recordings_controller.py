@@ -5,7 +5,7 @@ from flask_restx import Namespace, Resource, fields
 from app import db
 from app.repositories.epg_program_repository import EPGProgramRepository
 from app.models import RecordingSchedule, EPGProgram
-from app.tasks.recorder import start_recording_now, stop_recording_now, disparar_conversion
+from app.tasks.recorder import start_recording_now, stop_recording_now, procesar_partes_inactivas
 
 api = Namespace('recordings', description='Program recording operations')
 
@@ -186,8 +186,8 @@ class RecordingStop(Resource):
             rec.end_time = datetime.now() # Forzamos el fin
             db.session.commit()
             
-            # 3. Llamamos a nuestra nueva función reutilizable
-            disparar_conversion(current_app._get_current_object(), rec)
+            # 3. Llamamos a la función actualizada para procesar partes inactivas
+            procesar_partes_inactivas(current_app._get_current_object(), rec)
             
             return {'message': 'Recording stopped and conversion started'}, 200
         return {'message': 'Recording not found'}, 404
