@@ -23,6 +23,7 @@ services:
       - WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go
       - WG_THREADS=4
       - ENABLE_WARP=false
+      - ENABLE_ACESTREAM_SEARCH=true
       - CONTAINER_NETWORK_MODE=bridge
       - WARP_LICENSE_KEY=
       - FLASK_PORT=8040
