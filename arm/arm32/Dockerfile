@@ -32,18 +32,19 @@ RUN echo "import platform" > /tmp/download.py && \
     echo 'machine = platform.machine().lower()' >> /tmp/download.py && \
     echo 'if machine in ["x86_64", "amd64"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["amd64", "x86_64", "x64"]' >> /tmp/download.py && \
-    echo 'elif machine in ["aarch64", "armv8"]:' >> /tmp/download.py && \
+    echo 'elif machine in ["aarch64", "armv8", "arm64"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["arm64", "aarch64"]' >> /tmp/download.py && \
-	echo 'elif machine in ["arm", "hf", "armv7l"]:' >> /tmp/download.py && \
+	echo 'elif machine in ["arm", "hf"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["armv7", "armhf", "arm"]' >> /tmp/download.py && \
     echo 'else:' >> /tmp/download.py && \
     echo '    arch_keywords = [machine]' >> /tmp/download.py && \
     echo 'download_url = None' >> /tmp/download.py && \
     echo 'for asset in assets:' >> /tmp/download.py && \
     echo '    name = asset.get("name", "").lower()' >> /tmp/download.py && \
-    echo '    if (system in name or "linux" in name) and any(ak in name for ak in arch_keywords):' >> /tmp/download.py && \
-    echo '        download_url = asset.get("browser_download_url")' >> /tmp/download.py && \
-    echo '        break' >> /tmp/download.py && \
+    echo '    if "linux" in name and any(ak in name for ak in arch_keywords):' >> /tmp/download.py && \
+    echo '        if "apple" not in name and "windows" not in name:' >> /tmp/download.py && \
+    echo '            download_url = asset.get("browser_download_url")' >> /tmp/download.py && \
+    echo '            break' >> /tmp/download.py && \
     echo 'if not download_url and len(assets) == 1:' >> /tmp/download.py && \
     echo '    download_url = assets[0].get("browser_download_url")' >> /tmp/download.py && \
     echo 'print(f"Downloading Outpace asset from: {download_url}")' >> /tmp/download.py && \
@@ -143,20 +144,24 @@ RUN mkdir -p ZeroNet && \
 # --- ETAPA FINAL ---
 # Usamos la base que acabamos de construir para mantener las dependencias
 FROM base
+WORKDIR /app
 
-# Copiar archivos de aplicación (Asegúrate de ejecutar el build desde el nivel correcto)
-COPY --chmod=0755 /arm/arm32/entrypoint.sh healthcheck.sh warp-setup.sh ./
-COPY --chmod=0755 /arm/arm32/wgcf /usr/local/bin/wgcf
+# 1. Mover las dependencias ARRIBA para aprovechar la caché de Docker
 COPY requirements.txt requirements-prod.txt ./
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-prod.txt
+
+# 2. Copiar archivos comunes de la aplicación
 COPY migrations/ ./migrations/
 COPY migrations_app.py manage.py wsgi.py ./
 COPY app/ ./app/
 
-# Instalación de dependencias de la app
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements-prod.txt
+# 3. Copiar scripts específicos.
+COPY --chmod=0755 arm/arm32/entrypoint.sh ./
+COPY --chmod=0755 healthcheck.sh warp-setup.sh ./
+COPY --chmod=0755 arm/arm32/wgcf /usr/local/bin/wgcf
 
-# Instalación del motor Acestream (Archivos ZIP)
+# 4. Instalación del motor Acestream
 COPY arm/arm32/ace-armeabi-v7a.zip arm/arm32/system.zip /
 RUN unzip /ace-armeabi-v7a.zip -d /acestream && \
     unzip /system.zip -d / && \

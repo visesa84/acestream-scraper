@@ -29,7 +29,7 @@ RUN echo "import platform" > /tmp/download.py && \
     echo 'machine = platform.machine().lower()' >> /tmp/download.py && \
     echo 'if machine in ["x86_64", "amd64"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["amd64", "x86_64", "x64"]' >> /tmp/download.py && \
-    echo 'elif machine in ["aarch64", "armv8"]:' >> /tmp/download.py && \
+    echo 'elif machine in ["aarch64", "armv8", "arm64"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["arm64", "aarch64"]' >> /tmp/download.py && \
 	echo 'elif machine in ["arm", "hf", "armv7l"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["armv7", "armhf", "arm"]' >> /tmp/download.py && \
@@ -38,9 +38,10 @@ RUN echo "import platform" > /tmp/download.py && \
     echo 'download_url = None' >> /tmp/download.py && \
     echo 'for asset in assets:' >> /tmp/download.py && \
     echo '    name = asset.get("name", "").lower()' >> /tmp/download.py && \
-    echo '    if (system in name or "linux" in name) and any(ak in name for ak in arch_keywords):' >> /tmp/download.py && \
-    echo '        download_url = asset.get("browser_download_url")' >> /tmp/download.py && \
-    echo '        break' >> /tmp/download.py && \
+    echo '    if "linux" in name and any(ak in name for ak in arch_keywords):' >> /tmp/download.py && \
+    echo '        if "apple" not in name and "windows" not in name:' >> /tmp/download.py && \
+    echo '            download_url = asset.get("browser_download_url")' >> /tmp/download.py && \
+    echo '            break' >> /tmp/download.py && \
     echo 'if not download_url and len(assets) == 1:' >> /tmp/download.py && \
     echo '    download_url = assets[0].get("browser_download_url")' >> /tmp/download.py && \
     echo 'print(f"Downloading Outpace asset from: {download_url}")' >> /tmp/download.py && \
@@ -167,6 +168,7 @@ ENV FLASK_PORT=8040
 
 # --- STAGE 3: Imagen Final de la Aplicación ---
 FROM base
+WORKDIR /app
 
 LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
       version="2.0.0"
