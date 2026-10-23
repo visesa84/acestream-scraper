@@ -88,6 +88,8 @@ def check_outpace_github_updates():
             arch_keywords = ["amd64", "x86_64", "x64"]
         elif machine in ["aarch64", "armv8"]:
             arch_keywords = ["arm64", "aarch64"]
+        elif machine in ["arm", "hf", "armv7l"]:
+            arch_keywords = ["armv7"]
         else:
             arch_keywords = [machine]
             
