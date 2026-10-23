@@ -41,9 +41,12 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv4.ip_forward=1
     environment:
-      - TZ=Europe/Madrid
-      - ENABLE_TOR=false
+      - TZ='Europe/Madrid'
+      - ENV ENABLE_TOR=false
+      - WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
+      - WG_THREADS=4
       - ENABLE_WARP=false
+      - ENABLE_ACESTREAM_SEARCH=true
       - CONTAINER_NETWORK_MODE=host
       - WARP_LICENSE_KEY=
       - FLASK_PORT=8040
