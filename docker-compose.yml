@@ -14,7 +14,7 @@ services:
       - net.ipv4.ip_forward=1
     environment:
       - TZ=Europe/Madrid
-      - ENV ENABLE_TOR=false
+      - ENABLE_TOR=false
       - WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
       - WG_THREADS=4
       - ENABLE_WARP=false
