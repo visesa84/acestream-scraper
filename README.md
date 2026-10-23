@@ -30,7 +30,7 @@ version: '3.8'
 
 services:
   acestream-scraper:
-    image: visesa84/acestream-scraper:latest
+    image: visesa84/acestream-scraper-outpace:latest
     container_name: Acestream_Proxy
     cap_add:
       - NET_ADMIN
