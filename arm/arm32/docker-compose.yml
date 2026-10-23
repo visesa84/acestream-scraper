@@ -3,7 +3,7 @@ version: '3.8'
 services:
   acestream:
     platform: linux/arm/v7
-    image: visesa84/acestream-scraper-pyacexy:latest
+    image: visesa84/acestream-scraper-outpace:latest
     container_name: Acestream_Proxy
     network_mode: bridge
     privileged: true
