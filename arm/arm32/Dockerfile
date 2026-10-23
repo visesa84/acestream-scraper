@@ -34,7 +34,7 @@ RUN echo "import platform" > /tmp/download.py && \
     echo '    arch_keywords = ["amd64", "x86_64", "x64"]' >> /tmp/download.py && \
     echo 'elif machine in ["aarch64", "armv8"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["arm64", "aarch64"]' >> /tmp/download.py && \
-	echo 'elif machine in ["arm", "hf"]:' >> /tmp/download.py && \
+	echo 'elif machine in ["arm", "hf", "armv7l"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["armv7", "armhf", "arm"]' >> /tmp/download.py && \
     echo 'else:' >> /tmp/download.py && \
     echo '    arch_keywords = [machine]' >> /tmp/download.py && \
