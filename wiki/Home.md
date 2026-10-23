@@ -1,72 +1,34 @@
 # Acestream Scraper
 
-## Project Overview
+## Overview
 
-Acestream Scraper is a Python-based web application that automatically retrieves Acestream channel information from various sources and generates M3U playlists that can be used with any media player supporting the Acestream protocol.
+Acestream Scraper is a Flask web application for collecting AceStream channel references, organizing them into a channel catalog, and serving playlists and streams. It also includes TV-channel grouping, XMLTV EPG management, availability checks, and scheduled recordings.
 
-Built using Flask, BeautifulSoup, and SQLAlchemy, this application provides a comprehensive solution for managing and accessing Acestream channels through an intuitive web interface.
+The application manages references; it does not host channel content. You supply the source URLs or channel IDs and are responsible for using content lawfully.
 
-## Key Features
+## Current capabilities
 
-- **Automated Channel Discovery**: Scrapes Acestream channel information from multiple URLs
-- **Multiple Format Support**: Extracts data from both JSON and HTML content
-- **M3U Playlist Generation**: Creates playlists compatible with popular media players
-- **On-Demand Updates**: Refreshes channel data when needed
-- **Web Interface**: User-friendly dashboard for managing channels and configuration
-- **ZeroNet Support**: Can scrape content from ZeroNet sites
-- **Database Management**: Complete with migration support
-- **Built-in Acestream Integration**: Optional integrated Acestream engine with Acexy proxy
-- **External Acestream Support**: Connect to existing Acestream Engine instances
-- **Cloudflare WARP Integration**: Enhanced privacy and geo-unblocking capabilities
-- **Channel Status Monitoring**: Check which channels are online or offline
-- **Interactive Setup**: Easy configuration through a setup wizard
-- **Search Functionality**: Find specific channels quickly
-- **Automatic Rescanning**: Configure intervals for automatic updates
-- **API Documentation**: OpenAPI/Swagger UI for developers
-- **Health Monitoring**: Comprehensive system health checks
+- Scrape HTTP/HTTPS and ZeroNet pages.
+- Search AceStream catalog results using the bundled search service.
+- Manage channels, source URLs, blacklist entries, and stream status.
+- Group multiple stream IDs under TV channels and associate EPG data.
+- Generate M3U playlists in traditional or HLS mode.
+- Schedule recordings from EPG programs; recordings are stored under `/app/config/recordings` in Docker.
+- Use the REST API and interactive API docs at `/api/docs`.
+- Optionally enable Tor and Cloudflare WARP.
 
-## Architecture
+The Docker image runs Outpace for stream handling. Do not rely on older instructions that describe PyAcexy as a service started by the current entrypoint.
 
-The application follows a service-oriented architecture with:
+## Wiki
 
-- Repository pattern for data access
-- Service layer for business logic
-- Migrations support for database changes
-- Async task management
-- Clear separation of concerns
-- Integration with external services (Acestream, Acexy, ZeroNet)
+- [Installation](Installation.md)
+- [Docker deployment](Docker.md)
+- [Usage](Usage.md)
+- [Configuration](Configuration.md)
+- [Requirements](Requirements.md)
+- [FAQ](FAQ.md)
+- [Bug reporting](Bug-Reporting.md)
+- [Contributing scraper data](Contributing-Scraper-Data.md)
+- [TV channel management](tasks/channel-management.md)
 
-## Wiki Navigation
-
-- [Installation Guide](Installation.md) - How to install and set up the application
-- [Docker Guide](Docker.md) - Learn about Docker and how it works with this app
-- [Usage Guide](Usage.md) - How to use the application's features
-- [Configuration Reference](Configuration.md) - Detailed configuration information
-- [Requirements](Requirements.md) - System and software requirements
-- [FAQ](FAQ.md) - Frequently asked questions
-
-## Environment Variables (Canonical Reference)
-
-Canonical environment variables used across the project (short form):
-
-| Variable | Default | Description |
-|---|---:|---|
-| `DOCKER_ENV` | (unset) | When set, container uses `/app/config` for config and DB. |
-| `ENABLE_ACEXY` | `true` | Enable PyAcexy proxy. |
-| `ACEXY_HOST` | `localhost` | Host/IP where PyAcexy should connect. |
-| `ACEXY_PORT` | `6878` | Port of the Acestream Engine. |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. |
-| `CHECKSTATUS_ENABLED` | `true` | Controls automatic stream status checks. |
-
-See `wiki/Configuration.md` for full descriptions and recommended defaults.
-
-## License
-
-This project is licensed under the MIT License.
-
-## Acknowledgements
-
-Special thanks to the developers of Flask, BeautifulSoup, SQLAlchemy, and other dependencies used in this project.
-- [Acestream-scrapper](https://github.com/Pipepito/acestream-scraper) - Enhanced Acestream Scraper interface
-- [Pyacexy](https://github.com/wafy80/pyacexy) - Enhanced Acestream proxy interface with Python
-- [Acestream-http-proxy](https://github.com/martinbjeldbak/acestream-http-proxy) - HTTP proxy for Acestream
+See the repository's [README](../README.md) and [Compose configuration](../docker-compose.yml) for the quickest deployment path and the actual ports and mounts used by this checkout.

@@ -38,47 +38,36 @@ class M3UService:
         """Clean text by replacing multiple whitespace with single space and trimming."""
         if not text:
             return ""
-        # Replace all whitespace sequences (including newlines) with a single space
         cleaned_text = self.whitespace_pattern.sub(' ', text)
-        # Trim leading/trailing whitespace
         return cleaned_text.strip()
 
     def _get_base_url(self, url: str) -> str:
         """Extract base URL from the source URL."""
         parsed = urlparse(url)
-        # Handle ZeroNet URLs specially
         if ':43110/' in url:
-            # Keep original host for ZeroNet URLs
             host_with_port = parsed.netloc
             path_base = parsed.path.rsplit('/', 1)[0]
             return f"{parsed.scheme}://{host_with_port}{path_base}/"
-        # For regular URLs
         return f"{parsed.scheme}://{parsed.netloc}{parsed.path.rsplit('/', 1)[0]}/"
 
     async def find_m3u_links(self, content: str, base_url: str) -> List[str]:
         """Find M3U links in content with support for relative URLs."""
-        # Direct M3U URLs in the content
         m3u_urls = set(self.m3u_pattern.findall(content))
         
-        # Process relative URLs based on base_url
         relative_matches = re.findall(r'(["\'](/[^"\']*?\.m3u[8]?)["\'|\?])', content)
         for match, rel_url in relative_matches:
             try:
-                # Determine how to handle the URL based on base_url type
                 if ZeronetURL.is_valid_url(base_url):
-                    # For ZeroNet URLs
                     url_obj = create_url_object(base_url, 'zeronet')
                     if base_url.startswith('zero://'):
                         abs_url = f"zero://{rel_url.lstrip('/')}"
                     else:
-                        # For HTTP ZeroNet URLs
-                        host = '127.0.0.1'  # Default
+                        host = '127.0.0.1'
                         parsed = re.match(r'http://([\w\.]+):43110', base_url)
                         if parsed:
                             host = parsed.group(1)
                         abs_url = f"http://{host}:43110{rel_url}"
                 else:
-                    # For regular HTTP URLs
                     abs_url = urljoin(base_url, rel_url)
                 
                 m3u_urls.add(abs_url)
@@ -103,17 +92,12 @@ class M3UService:
             line = line.strip()
             
             if line.startswith('#EXTINF:'):
-                # Parse EXTINF line
                 extinf_match = self.extinf_pattern.match(line)
                 if extinf_match:
-                    # Extract metadata
                     metadata = extinf_match.group(2) or ""
                     name = extinf_match.group(3)
-                    
-                    # Clean the channel name
                     name = self.clean_text(name)
                     
-                    # Parse TVG tags if present
                     tvg_id = None
                     tvg_name = None
                     logo = None
@@ -131,8 +115,8 @@ class M3UService:
                             group = self.clean_text(tag.group(1))
                     
                     current_extinf = M3UChannel(
-                        id="",  # Will be set when we find the acestream URL
-                        name=name or "Unknown Channel",  # Default name if none provided
+                        id="",
+                        name=name or "Unknown Channel",
                         group=group,
                         logo=logo,
                         tvg_id=tvg_id,
@@ -140,19 +124,16 @@ class M3UService:
                     )
             
             elif not line.startswith('#') and current_extinf:
-                # Extract acestream ID from URL
                 acestream_id = self.stream_service.extract_acestream_id(line)
                 if acestream_id:
-                    # If no name was provided in EXTINF, use the ID as name
                     if not current_extinf.name or current_extinf.name == "Unknown Channel":
                         current_extinf.name = f"Channel {acestream_id}"
                         
                     current_extinf.id = acestream_id
-                    current_extinf.original_url = line  # Store original URL
+                    current_extinf.original_url = line
                     channels.append(current_extinf)
                 current_extinf = None
 
-        # Filter out entries with missing IDs
         return [ch for ch in channels if ch.id]
 
     async def extract_channels_from_m3u(self, m3u_url: str) -> List[Tuple[str, str, Dict]]:
@@ -160,10 +141,8 @@ class M3UService:
         channels = []
         
         try:
-            # Create the appropriate URL object based on URL type
             url_obj = create_url_object(m3u_url)
             
-            # Handle different URL types
             if isinstance(url_obj, ZeronetURL):
                 m3u_content = await self._fetch_zeronet_m3u(m3u_url)
             else:
@@ -172,27 +151,18 @@ class M3UService:
             if not m3u_content:
                 return []
             
-            # Parse the M3U content
             channel_info = {}
-            channel_id = None
             
             for line in m3u_content.splitlines():
                 line = line.strip()
                 
-                # Skip empty lines and comments
                 if not line or line.startswith('#'):
-                    # Extract metadata from EXTINF line
                     if line.startswith('#EXTINF:'):
-                        # Parse channel name and optional attributes
                         name_match = re.search(r'#EXTINF:.*,(.+)', line)
                         if name_match:
                             channel_info['name'] = name_match.group(1).strip()
-                        
-                        # Extract any other metadata
-                        # ... (implementation details)
                     continue
                 
-                # Check if the line contains an acestream link
                 acestream_match = self.acestream_pattern.search(line)
                 if acestream_match:
                     channel_id = acestream_match.group(1)
@@ -233,30 +203,25 @@ class M3UService:
             return None
 
     def extract_channels_from_content(self, content: str) -> List[Tuple[str, str, Dict]]:
-        """Extract channel information directly from M3U content."""
+        """Extract channel information directly from M3U content supporting Outpace formats."""
         channels = []
         channel_info = {}
         
         for line in content.splitlines():
             line = line.strip()
             
-            # Skip empty lines
             if not line:
                 continue
             
-            # Handle EXTINF lines
             if line.startswith('#EXTINF:'):
-                # Parse channel name and optional attributes
                 name_match = re.search(r'#EXTINF:.*,(.+)', line)
                 if name_match:
                     channel_info['name'] = name_match.group(1).strip()
                 
-                # Extract tvg-id, tvg-name, group-title, etc.
                 for tag_match in re.finditer(r'(tvg-[^=]+|group-title)="([^"]+)"', line):
                     tag_name = tag_match.group(1)
                     tag_value = tag_match.group(2)
                     
-                    # Normalize field names to match database column names
                     if tag_name == 'tvg-id':
                         channel_info['tvg_id'] = tag_value
                     elif tag_name == 'tvg-name':
@@ -266,40 +231,31 @@ class M3UService:
                     elif tag_name == 'group-title':
                         channel_info['group'] = tag_value
                     else:
-                        # Store any other metadata with original name
                         channel_info[tag_name] = tag_value
                 
                 continue
             
-            # Skip other comment lines
             if line.startswith('#'):
                 continue
             
-            # Check if the line contains an acestream link or ace/getstream URL
+            # Soporte ampliado para rutas de compatibilidad y nativas HLS de Outpace
             acestream_match = self.acestream_pattern.search(line)
             getstream_match = re.search(r'ace/getstream\?id=([\w\d]+)', line) if not acestream_match else None
+            hls_outpace_match = re.search(r'streams/ace/cid:([\w\d]+)', line) if not acestream_match and not getstream_match else None
             
+            matched_id = None
             if acestream_match:
-                channel_id = acestream_match.group(1)
-                name = channel_info.get('name', f"Channel {channel_id}")
-                
-                # Extract any other metadata
-                metadata = {k: v for k, v in channel_info.items() if k != 'name'}
-                
-                channels.append((channel_id, name, metadata))
-                
-                # Reset channel_info for the next channel
-                channel_info = {}
+                matched_id = acestream_match.group(1)
             elif getstream_match:
-                channel_id = getstream_match.group(1)
+                matched_id = getstream_match.group(1)
+            elif hls_outpace_match:
+                matched_id = hls_outpace_match.group(1)
+            
+            if matched_id:
+                channel_id = matched_id
                 name = channel_info.get('name', f"Channel {channel_id}")
-                
-                # Extract any other metadata
                 metadata = {k: v for k, v in channel_info.items() if k != 'name'}
-                
                 channels.append((channel_id, name, metadata))
-                
-                # Reset channel_info for the next channel
                 channel_info = {}
         
         logger.info(f"Extracted {len(channels)} channels with metadata from M3U content")

@@ -5,69 +5,73 @@
 {% block streams_active %}active{% endblock %}
 
 {% block content %}
-<div class="container py-4">    
-    <!-- Statistics summary -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <h5 class="card-title" data-bs-toggle="tooltip" title="Total number of unique acestream channels in the system">Total Acestreams</h5>
-                    <h2 id="totalStreamsCard">...</h2>
+<div class="container-fluid py-4">    
+    <!-- Header Title Section -->
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-6">
+            <h4 class="fw-bold mb-1 text-primary d-flex align-items-center gap-2">
+                <i class="bi bi-broadcast"></i> Acestream Channels Management
+            </h4>
+            <p class="text-muted small mb-0">Monitor, filter and manage available streams in real time.</p>
+        </div>
+    </div>
+
+    <!-- Statistics summary cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted small fw-bold text-uppercase mb-2" data-bs-toggle="tooltip" title="Total number of unique acestream channels in the system">Total Acestreams</h6>
+                    <h3 id="totalStreamsCard" class="fw-bold text-primary mb-0">...</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <h5 class="card-title" data-bs-toggle="tooltip" title="Number of acestreams currently available for streaming">Online Acestreams</h5>
-                    <h2 id="onlineStreamsCard">...</h2>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted small fw-bold text-uppercase mb-2" data-bs-toggle="tooltip" title="Number of acestreams currently available for streaming">Online Acestreams</h6>
+                    <h3 id="onlineStreamsCard" class="fw-bold text-success mb-0">...</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <h5 class="card-title" data-bs-toggle="tooltip" title="Number of acestreams with EPG metadata">With EPG Data</h5>
-                    <h2 id="withEpgStreamsCard">...</h2>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted small fw-bold text-uppercase mb-2" data-bs-toggle="tooltip" title="Number of acestreams with EPG metadata">With EPG Data</h6>
+                    <h3 id="withEpgStreamsCard" class="fw-bold text-info mb-0">...</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <h5 class="card-title" data-bs-toggle="tooltip" title="Number of acestreams currently linked to TV channels">Linked to TV</h5>
-                    <h2 id="assignedStreamsCard">...</h2>
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body text-center p-4">
+                    <h6 class="text-muted small fw-bold text-uppercase mb-2" data-bs-toggle="tooltip" title="Number of acestreams currently linked to TV channels">Linked to TV</h6>
+                    <h3 id="assignedStreamsCard" class="fw-bold text-secondary mb-0">...</h3>
                 </div>
             </div>
         </div>
     </div>
     
     <!-- Playlist Section -->
-    <div class="card mb-4">
-        <div class="card-header">Acestream Playlist</div>
-        <div class="card-body">
-            <div class="row mb-3">
-                <div class="col-md-8">
-                    <div class="input-group mb-2">
-                        <input type="text" class="form-control" id="playlistUrl" value="{{ request.url_root }}playlist.m3u" readonly>
-                        <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('#playlistUrl')">Copy</button>
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+            <h5 class="card-title fw-bold text-primary mb-0">Acestream Playlist</h5>
+        </div>
+        <div class="card-body px-4 py-3">
+            <div class="row align-items-center">
+                <div class="col-md-8 mb-3 mb-md-0">
+                    <div class="input-group">
+                        <input type="text" class="form-control bg-body-tertiary border-0 rounded-start-3 font-monospace small" id="playlistUrl" value="{{ request.url_root }}playlist.m3u" readonly>
+                        <button class="btn btn-outline-secondary border-0 rounded-end-3 px-3" type="button" onclick="copyToClipboard('#playlistUrl')">Copy</button>
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="d-flex justify-content-end gap-2">
-                        <button class="btn btn-success btn-sm" onclick="downloadPlaylist(false)">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download me-1" viewBox="0 0 16 16">
-                                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-                            </svg>
-                            Download
+                    <div class="d-flex justify-content-md-end gap-2">
+                        <button class="btn btn-success btn-sm rounded-pill px-3 shadow-sm" onclick="downloadPlaylist(false)">
+                            <i class="bi bi-download me-1"></i> Download
                         </button>
-                        <button class="btn btn-primary btn-sm" onclick="downloadPlaylist(true)">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-repeat me-1" viewBox="0 0 16 16">
-                                <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-                            </svg>
-                            Refresh & Download
+                        <button class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm" onclick="downloadPlaylist(true)">
+                            <i class="bi bi-arrow-repeat me-1"></i> Refresh & Download
                         </button>
                     </div>
                 </div>
@@ -76,68 +80,53 @@
     </div>
     
     <!-- Add Channel Form -->
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Add Channel Manually</h5>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleAdvancedFields">
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
+            <h5 class="card-title fw-bold text-primary mb-0">Add Channel Manually</h5>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" id="toggleAdvancedFields">
                 <span id="advancedToggleText">Show Advanced</span>
             </button>
         </div>
-        <div class="card-body">
-            {% include 'partials/forms/add_channel.html' %}
+        <div class="card-body px-4 py-3">
+            {% include 'partials/forms/add_channel.html' ignore missing %}
         </div>
     </div>
     
     <!-- Channel Search and Actions -->
-    <div class="card mb-4">
-        <div class="card-header">Channel Search and Filters</div>
-        <div class="card-body">
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <!-- Create a flex container for search and filter -->
-                    <div class="d-flex gap-2 mb-2">
-                        <!-- Smaller search box -->
-                        <div class="input-group" style="width: 60%;">
-                            <span class="input-group-text">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16">
-                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
-                                </svg>
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+            <h5 class="card-title fw-bold text-primary mb-0">Channel Search and Filters</h5>
+        </div>
+        <div class="card-body px-4 py-3">
+            <div class="row align-items-center g-3">
+                <div class="col-md-8">
+                    <div class="d-flex gap-2 flex-wrap flex-md-nowrap">
+                        <div class="input-group flex-grow-1">
+                            <span class="input-group-text bg-body-tertiary border-0 rounded-start-3">
+                                <i class="bi bi-search text-muted"></i>
                             </span>
                             <input type="text" 
-                                   class="form-control" 
+                                   class="form-control bg-body-tertiary border-0" 
                                    id="channelSearch" 
                                    placeholder="Filter channels..."
                                    onkeyup="debounce(searchChannels, 300)(this.value)">
                         </div>
                         
-                        <!-- URL filter dropdown -->
-                        <select class="form-select" id="urlFilter" onchange="filterByUrl(this.value)">
+                        <select class="form-select bg-body-tertiary border-0 rounded-3 w-auto" id="urlFilter" onchange="filterByUrl(this.value)">
                             <option value="">All Sources</option>
                             <option value="manual">Manual/Legacy Channels</option>
-                            <!-- Other options will be populated by JavaScript -->
                         </select>
                     </div>
-                    
-                    <div class="form-text">Filtered results will be applied to the playlist when downloading</div>
+                    <div class="form-text small mt-1">Filtered results will be applied to the playlist when downloading</div>
                 </div>
-                <div class="col-md-6">
-                    <div class="d-flex justify-content-md-end mt-2 mt-md-0">
-                        <div class="btn-group">
-                            <button onclick="refreshData()" class="btn btn-outline-secondary btn-sm" title="Refresh data">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-clockwise" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-                                </svg>
-                                <span class="d-none d-md-inline ms-1">Refresh</span>
-                            </button>
-                            <button onclick="checkChannelsStatus()" class="btn btn-outline-primary btn-sm" title="Check all channels status">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-shield-check" viewBox="0 0 16 16">
-                                    <path d="M5.338 1.59a61.44 61.44 0 0 0-2.837.856.481.481 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.725 10.725 0 0 0 2.287 2.233c.346.244.652.42.893.533.12.057.218.095.293.118a.55.55 0 0 0 .101.025.615.615 0 0 0 .1-.025c.076-.023.174-.061.294-.118.24-.113.547-.29.893-.533a10.726 10.726 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.651-.213-1.75-.56-2.837-.855C9.552 1.29 8.531 1.067 8 1.067c-.53 0-1.552.223-2.662.524zM5.072.56C6.157.265 7.31 0 8 0s1.843.265 2.928.56c1.11.3 2.229.655 2.887.87a1.54 1.54 0 0 1 1.044 1.262c.596 4.477-.787 7.795-2.465 9.99a11.775 11.775 0 0 1-2.517 2.453a7.159 7.159 0 0 1-1.048.625c-.28.132-.581.24-.829.24s-.548-.108-.829-.24a7.158 7.158 0 0 1-1.048-.625 11.777 11.777 0 0 1-2.517-2.453C1.928 10.487.545 7.169 1.141 2.692A1.54 1.54 0 0 1 2.185 1.43 62.456 62.456 0 0 1 5.072.56z"/>
-                                    <path d="M10.854 5.146a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708 0l-1.5-1.5a.5.5 0 1 1 .708-.708L7.5 7.793l2.646-2.647a.5.5 0 0 1 .708 0z"/>
-                                </svg>
-                                <span class="d-none d-md-inline ms-1">Check All</span>
-                            </button>
-                        </div>
+                <div class="col-md-4 text-md-end">
+                    <div class="btn-group shadow-sm rounded-pill">
+                        <button onclick="refreshData()" class="btn btn-outline-secondary btn-sm px-3" title="Refresh data">
+                            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                        </button>
+                        <button onclick="checkChannelsStatus()" class="btn btn-outline-primary btn-sm px-3" title="Check all channels status">
+                            <i class="bi bi-shield-check me-1"></i> Check All
+                        </button>
                     </div>
                 </div>
             </div>
@@ -145,28 +134,27 @@
     </div>
         
     <!-- Channel List -->
-    <div class="card">
-        <div class="card-header">
-            <div class="d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Acestream Channels</h5>
-                <span class="badge bg-primary" id="channelCount">Loading...</span>
-            </div>
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
+            <h5 class="card-title fw-bold text-primary mb-0">Acestream Channels</h5>
+            <span class="badge bg-primary rounded-pill px-3" id="channelCount">Loading...</span>
         </div>
-        <div class="card-body">
+        <div class="card-body px-4 py-3">
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <th>Channel</th>
-                            <th>ID</th>
-                            <th>Status/Time</th>
-                            <th>Actions</th>
+                            <th class="border-0 rounded-start ps-4" style="width: 30%;">Channel Name</th>
+                            <th class="border-0" style="width: 25%;">Stream ID / Hash</th>
+                            <th class="border-0" style="width: 15%;">Status / Info</th>
+                            <th class="border-0" style="width: 15%;">Last Checked</th>
+                            <th class="border-0 text-end rounded-end pe-4" style="width: 15%;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="channelListContent">
                         <tr>
-                            <td colspan="4" class="text-center">
-                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
                                     <span class="visually-hidden">Loading channels...</span>
                                 </div>
                                 <span class="ms-2">Loading channels...</span>
@@ -177,76 +165,96 @@
             </div>
         </div>
     </div>
-	<!-- Channel Edit Modal -->
-	<div class="modal fade" id="editChannelModal" tabindex="-1" aria-labelledby="editChannelModalLabel" aria-hidden="true">
-		<div class="modal-dialog modal-lg">
-			<div class="modal-content">
-				<div class="modal-header">
-					<h5 class="modal-title" id="editChannelModalLabel">Edit Channel</h5>
-					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-				</div>
-				<div class="modal-body">
-					<form id="editChannelForm" class="row g-3">
-						<input type="hidden" id="editChannelId">
-						
-						<div class="form-check form-switch mb-3">
-							<input class="form-check-input" type="checkbox" id="editChannelStatus">
-							<label class="form-check-label" for="editChannelStatus">
-								Channel: <span id="statusLabelText" class="fw-bold">Active</span>
-							</label>
-						</div>
-					
-						<div class="col-md-6">
-							<label for="editChannelName" class="form-label">Channel Name</label>
-							<input type="text" class="form-control" id="editChannelName" required>
-						</div>
-						
-						<div class="col-md-6">
-							<label for="editChannelGroup" class="form-label">Group</label>
-							<input type="text" class="form-control" id="editChannelGroup">
-						</div>
-						
-						<div class="col-md-6">
-							<label for="editChannelLogo" class="form-label">Logo URL</label>
-							<input type="url" class="form-control" id="editChannelLogo">
-						</div>
-						
-						<div class="col-md-6">
-							<label for="editChannelTvgId" class="form-label">TVG ID</label>
-							<input type="text" class="form-control" id="editChannelTvgId">
-						</div>
-						
-						<div class="col-md-6">
-							<label for="editChannelTvgName" class="form-label">TVG Name</label>
-							<input type="text" class="form-control" id="editChannelTvgName">
-						</div>
-						
-						<div class="col-md-6">
-							<label for="editChannelOriginalUrl" class="form-label">Original URL</label>
-							<input type="url" class="form-control" id="editChannelOriginalUrl">
-						</div>
-						
-						<div class="col-md-6">
-							<label for="editChannelM3uSource" class="form-label">M3U Source</label>
-							<input type="text" class="form-control" id="editChannelM3uSource">
-						</div>
 
-						<div class="col-md-6">
-							<input class="form-check-input" type="checkbox" id="editChannelEpgLocked">
-							<label class="form-check-label" for="editChannelEpgLocked">
-								Lock mapping from EPG source
-							</label>
-						</div>
-					</form>
-				</div>
-				<div class="modal-footer">
-					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-					<button type="button" class="btn btn-primary" id="saveEditChannelBtn">Save Changes</button>
-				</div>
-			</div>
-		</div>
-	</div>
+    <!-- Channel Edit Modal -->
+    <div class="modal fade" id="editChannelModal" tabindex="-1" aria-labelledby="editChannelModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="modal-header border-0 pb-0 px-4 pt-4">
+                    <h5 class="modal-title fw-bold text-primary" id="editChannelModalLabel">Edit Channel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <form id="editChannelForm" class="row g-3">
+                        <input type="hidden" id="editChannelId">
+                        
+                        <div class="form-check form-switch mb-3 p-3 bg-body-tertiary rounded-3">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" id="editChannelStatus" role="switch">
+                            <label class="form-check-label fw-semibold" for="editChannelStatus">
+                                Channel: <span id="statusLabelText" class="fw-bold text-success">Active</span>
+                            </label>
+                        </div>
+                    
+                        <div class="col-md-6">
+                            <label for="editChannelName" class="form-label small fw-bold text-uppercase text-muted">Channel Name</label>
+                            <input type="text" class="form-control bg-body-tertiary border-0 rounded-3" id="editChannelName" required>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="editChannelGroup" class="form-label small fw-bold text-uppercase text-muted">Group</label>
+                            <input type="text" class="form-control bg-body-tertiary border-0 rounded-3" id="editChannelGroup">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="editChannelLogo" class="form-label small fw-bold text-uppercase text-muted">Logo URL</label>
+                            <input type="url" class="form-control bg-body-tertiary border-0 rounded-3" id="editChannelLogo">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="editChannelTvgId" class="form-label small fw-bold text-uppercase text-muted">TVG ID</label>
+                            <input type="text" class="form-control bg-body-tertiary border-0 rounded-3" id="editChannelTvgId">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="editChannelTvgName" class="form-label small fw-bold text-uppercase text-muted">TVG Name</label>
+                            <input type="text" class="form-control bg-body-tertiary border-0 rounded-3" id="editChannelTvgName">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="editChannelOriginalUrl" class="form-label small fw-bold text-uppercase text-muted">Original URL</label>
+                            <input type="url" class="form-control bg-body-tertiary border-0 rounded-3" id="editChannelOriginalUrl">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="editChannelM3uSource" class="form-label small fw-bold text-uppercase text-muted">M3U Source</label>
+                            <input type="text" class="form-control bg-body-tertiary border-0 rounded-3" id="editChannelM3uSource">
+                        </div>
+
+                        <div class="col-12 mt-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="editChannelEpgLocked">
+                                <label class="form-check-label fw-semibold" for="editChannelEpgLocked">
+                                    Lock mapping from EPG source
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer border-top-0 px-4 pb-4">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 shadow-sm" id="saveEditChannelBtn">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<style>
+    .channel-logo {
+        object-fit: contain;
+        background-color: #f8f9fa;
+        padding: 2px;
+        border-radius: 6px;
+    }
+    .table {
+        table-layout: fixed;
+        width: 100%;
+    }
+    #channelListContent td {
+        word-break: break-word;
+        vertical-align: middle !important;
+    }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -255,9 +263,9 @@
 <script>
     function copyToClipboard(element) {
         const el = document.querySelector(element);
+        if (!el) return;
         el.select();
         document.execCommand('copy');
-        // Show temporary feedback
         const oldValue = el.value;
         el.value = 'Copied!';
         setTimeout(() => {
@@ -265,9 +273,21 @@
         }, 1000);
     }
     
-    // Function to download playlist
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+    
     function downloadPlaylist(refresh = false) {
-        const searchTerm = document.getElementById('channelSearch').value.trim();
+        const searchInput = document.getElementById('channelSearch');
+        const searchTerm = searchInput ? searchInput.value.trim() : '';
         let url = '/playlist.m3u'; 
         const params = new URLSearchParams();
         
@@ -285,18 +305,22 @@
         window.location.href = url;
     }
     
-    // Toggle advanced fields visibility
-    document.getElementById('toggleAdvancedFields').addEventListener('click', function() {
-        const advancedFields = document.getElementById('advancedChannelFields');
-        const toggleText = document.getElementById('advancedToggleText');
-        
-        if (advancedFields.classList.contains('d-none')) {
-            advancedFields.classList.remove('d-none');
-            toggleText.textContent = 'Hide Advanced';
-        } else {
-            advancedFields.classList.add('d-none');
-            toggleText.textContent = 'Show Advanced';
-        }
-    });
+    const toggleBtn = document.getElementById('toggleAdvancedFields');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+            const advancedFields = document.getElementById('advancedChannelFields');
+            const toggleText = document.getElementById('advancedToggleText');
+            
+            if (advancedFields) {
+                if (advancedFields.classList.contains('d-none')) {
+                    advancedFields.classList.remove('d-none');
+                    toggleText.textContent = 'Hide Advanced';
+                } else {
+                    advancedFields.classList.add('d-none');
+                    toggleText.textContent = 'Show Advanced';
+                }
+            }
+        });
+    }
 </script>
 {% endblock %}

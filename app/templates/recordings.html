@@ -1,37 +1,50 @@
 {% extends "layout.html" %}
+
+{% block title %}Recordings - Acestream Scraper{% endblock %}
+
 {% block recordings_active %}active{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <!-- Cabecera -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="mb-0"><i class="bi bi-record-circle text-danger"></i> Recordings Management</h2>
-        </div>
-        <button class="btn btn-primary shadow-sm" onclick="loadRecordings()">
-            <i class="bi bi-arrow-clockwise"></i> Refresh
+<!-- Main Header Section -->
+<div class="row mb-4 align-items-center">
+    <div class="col-md-6">
+        <h4 class="fw-bold mb-1 text-primary d-flex align-items-center gap-2">
+            <i class="bi bi-record-circle text-danger"></i> Recordings Management
+        </h4>
+        <p class="text-muted small mb-0">Manage scheduled and completed DVR stream recordings.</p>
+    </div>
+    <div class="col-md-6 text-md-end mt-3 mt-md-0">
+        <button class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm" onclick="loadRecordings()">
+            <i class="bi bi-arrow-clockwise me-1"></i> Refresh
         </button>
     </div>
+</div>
 
-    <!-- Tabla principal -->
-    <div class="card border-0 shadow-sm">
+<!-- Main Table Card -->
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+        <h5 class="card-title fw-bold mb-0 text-primary d-flex align-items-center gap-2">
+            <i class="bi bi-list-task"></i> Recordings List
+        </h5>
+    </div>
+    <div class="card-body p-4">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th style="width: 40%">Program / Filename</th>
-                        <th style="width: 10%">Status</th>
-                        <th style="width: 10%">Size</th>
-                        <th style="width: 15%">Date Start</th>
-						<th style="width: 15%">Date End</th>
-                        <th style="width: 10%" class="text-end">Actions</th>
+                        <th class="border-0 rounded-start ps-3" style="width: 35%">Program / Filename</th>
+                        <th class="border-0" style="width: 15%">Status</th>
+                        <th class="border-0" style="width: 10%">Size</th>
+                        <th class="border-0" style="width: 15%">Date Start</th>
+                        <th class="border-0" style="width: 15%">Date End</th>
+                        <th class="border-0 text-end rounded-end pe-3" style="width: 10%">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="recordingsTable">
                     <tr>
-                        <td colspan="6" class="text-center py-5">
-                            <div class="spinner-border text-primary" role="status"></div>
-                            <p class="mt-2 text-muted">Scanning for files...</p>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                            Scanning for files...
                         </td>
                     </tr>
                 </tbody>
@@ -39,17 +52,17 @@
         </div>
     </div>
 </div>
+
 <!-- MODAL DEL REPRODUCTOR NATIVO MP4 -->
 <div class="modal fade" id="videoModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content bg-dark border-0">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title text-white" id="videoTitle">Playing Recording</h5>
+        <div class="modal-content bg-dark border-0 rounded-4 overflow-hidden shadow-lg">
+            <div class="modal-header border-0 pb-0 px-4 pt-4">
+                <h5 class="modal-title text-white fw-bold" id="videoTitle">Playing Recording</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="stopVideo()"></button>
             </div>
-            <div class="modal-body p-3">
-                <div class="ratio ratio-16x9 bg-black rounded overflow-hidden">
-                    <!-- USAMOS LA ETIQUETA VIDEO ESTÁNDAR -->
+            <div class="modal-body p-4">
+                <div class="ratio ratio-16x9 bg-black rounded-3 overflow-hidden">
                     <video id="videoPlayer" controls class="w-100 h-100">
                         Tu navegador no soporta la reproducción de video MP4.
                     </video>
@@ -58,58 +71,59 @@
         </div>
     </div>
 </div>
+
 <!-- Modal para Editar Horarios -->
 <div class="modal fade" id="editTimeModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-success text-white border-bottom-0">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-success text-white border-bottom-0 py-3 px-4">
                 <h5 class="modal-title fw-bold">
-                    <i class="bi"></i>Adjust Recording: <span id="editProgramTitle" class="fw-normal"></span>
+                    <i class="bi bi-calendar-check me-2"></i>Adjust Recording: <span id="editProgramTitle" class="fw-normal"></span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-				<input type="hidden" id="editProgramId">
-				
-				<!-- SECCIÓN INICIO -->
-				<div class="mb-4 p-3 bg-light rounded border-start border-4 border-primary">
-					<label class="form-label small fw-bold text-uppercase text-muted">Start Recording</label>
-					<div class="row g-2 align-items-center">
-						<div class="col-6">
-							<input type="date" id="editStartDate" class="form-control form-control-sm shadow-sm" onchange="validateTimes()">
-						</div>
-						<div class="col-6 d-flex align-items-center">
-							<button class="btn btn-outline-secondary btn-sm px-1 py-0 me-1 time-ctrl" onclick="adjustTime('editStartTime', -10)">-10</button>
-							<input type="time" id="editStartTime" class="form-control form-control-sm shadow-sm" onchange="validateTimes()">
-							<button class="btn btn-outline-secondary btn-sm px-1 py-0 ms-1 time-ctrl" onclick="adjustTime('editStartTime', 10)">+10</button>
-						</div>
-					</div>
-					<div id="startWarning" class="form-text text-danger d-none mt-2 fw-bold">
-						<i class="bi bi-lock-fill"></i> Recording in progress: Start blocked.
-					</div>
-				</div>
+                <input type="hidden" id="editProgramId">
+                
+                <!-- SECCIÓN INICIO -->
+                <div class="mb-4 p-3 bg-body-tertiary rounded-3 border-start border-4 border-primary">
+                    <label class="form-label small fw-bold text-uppercase text-muted">Start Recording</label>
+                    <div class="row g-2 align-items-center">
+                        <div class="col-6">
+                            <input type="date" id="editStartDate" class="form-control form-control-sm border-0 bg-white shadow-sm" onchange="validateTimes()">
+                        </div>
+                        <div class="col-6 d-flex align-items-center">
+                            <button class="btn btn-outline-secondary btn-sm px-1 py-0 me-1 time-ctrl" onclick="adjustTime('editStartTime', -10)">-10</button>
+                            <input type="time" id="editStartTime" class="form-control form-control-sm border-0 bg-white shadow-sm" onchange="validateTimes()">
+                            <button class="btn btn-outline-secondary btn-sm px-1 py-0 ms-1 time-ctrl" onclick="adjustTime('editStartTime', 10)">+10</button>
+                        </div>
+                    </div>
+                    <div id="startWarning" class="form-text text-danger d-none mt-2 fw-bold">
+                        <i class="bi bi-lock-fill"></i> Recording in progress: Start blocked.
+                    </div>
+                </div>
 
-				<!-- SECCIÓN FIN -->
-				<div class="mb-2 p-3 bg-light rounded border-start border-4 border-success">
-					<label class="form-label small fw-bold text-uppercase text-muted">End of Recording</label>
-					<div class="row g-2 align-items-center">
-						<div class="col-6">
-							<input type="date" id="editEndDate" class="form-control form-control-sm shadow-sm" onchange="validateTimes()">
-						</div>
-						<div class="col-6 d-flex align-items-center">
-							<button class="btn btn-outline-secondary btn-sm px-1 py-0 me-1 time-ctrl" onclick="adjustTime('editEndTime', -10)">-10</button>
-							<input type="time" id="editEndTime" class="form-control form-control-sm shadow-sm" onchange="validateTimes()">
-							<button class="btn btn-outline-secondary btn-sm px-1 py-0 ms-1 time-ctrl" onclick="adjustTime('editEndTime', 10)">+10</button>
-						</div>
-					</div>
-					<div id="timeError" class="form-text text-danger d-none mt-2 fw-bold">
-						<i class="bi bi-x-circle-fill"></i> The end must come after the beginning..
-					</div>
-				</div>
-			</div>
-            <div class="modal-footer bg-light border-top-0">
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success btn-sm px-4 shadow-sm" onclick="saveNewTimes()">
+                <!-- SECCIÓN FIN -->
+                <div class="mb-2 p-3 bg-body-tertiary rounded-3 border-start border-4 border-success">
+                    <label class="form-label small fw-bold text-uppercase text-muted">End of Recording</label>
+                    <div class="row g-2 align-items-center">
+                        <div class="col-6">
+                            <input type="date" id="editEndDate" class="form-control form-control-sm border-0 bg-white shadow-sm" onchange="validateTimes()">
+                        </div>
+                        <div class="col-6 d-flex align-items-center">
+                            <button class="btn btn-outline-secondary btn-sm px-1 py-0 me-1 time-ctrl" onclick="adjustTime('editEndTime', -10)">-10</button>
+                            <input type="time" id="editEndTime" class="form-control form-control-sm border-0 bg-white shadow-sm" onchange="validateTimes()">
+                            <button class="btn btn-outline-secondary btn-sm px-1 py-0 ms-1 time-ctrl" onclick="adjustTime('editEndTime', 10)">+10</button>
+                        </div>
+                    </div>
+                    <div id="timeError" class="form-text text-danger d-none mt-2 fw-bold">
+                        <i class="bi bi-x-circle-fill"></i> The end must come after the beginning.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top-0 px-4 py-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success btn-sm rounded-pill px-4 shadow-sm" onclick="saveNewTimes()">
                     <i class="bi bi-save me-1"></i> Save Changes
                 </button>
             </div>
@@ -118,7 +132,6 @@
 </div>
 
 <style>
-    /* Estilos para el estado Recording */
     .pulse-red {
         background-color: #dc3545 !important;
         animation: pulse-animation 2s infinite;
@@ -129,51 +142,39 @@
         70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
         100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
     }
-	/* Estilo para el icono de edición en la tabla */
-	.bi-pencil-square {
-		transition: all 0.2s ease;
-		padding: 4px;
-		border-radius: 4px;
-	}
-
-	.bi-pencil-square:hover {
-		background-color: rgba(13, 110, 253, 0.1); /* Azul suave al pasar el ratón */
-		transform: scale(1.2);
-	}
-
-	/* Para que el input datetime-local se vea bien en móviles */
-	input[type="datetime-local"] {
-		cursor: pointer;
-	}
-	/* Estilo para que el cursor indique que hay ayuda al pasar el ratón */
-    .helper-text { cursor: help; border-bottom: 1px dashed #ccc; }
-	.time-ctrl {
-		font-size: 0.65rem !important;
-		font-weight: bold;
-		min-width: 32px;
-		height: 24px;
-		border-color: #dee2e6;
-	}
-	.time-ctrl:hover {
-		background-color: #f8f9fa;
-		color: #0d6efd;
-	}
-	input[type="time"]::-webkit-calendar-picker-indicator {
-		display: none; /* Opcional: esconde el reloj nativo para usar solo tus botones */
-	}
-	.spin {
-		animation: rotation 2s infinite linear;
-		display: inline-block;
-	}
-	@keyframes rotation {
-		from { transform: rotate(0deg); }
-		to { transform: rotate(359deg); }
-	}
+    .bi-pencil-square {
+        transition: all 0.2s ease;
+        padding: 4px;
+        border-radius: 4px;
+    }
+    .bi-pencil-square:hover {
+        background-color: rgba(13, 110, 253, 0.1);
+        transform: scale(1.2);
+    }
+    .time-ctrl {
+        font-size: 0.65rem !important;
+        font-weight: bold;
+        min-width: 32px;
+        height: 24px;
+        border-color: #dee2e6;
+    }
+    .time-ctrl:hover {
+        background-color: #f8f9fa;
+        color: #0d6efd;
+    }
+    .spin {
+        animation: rotation 2s infinite linear;
+        display: inline-block;
+    }
+    @keyframes rotation {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(359deg); }
+    }
 </style>
+{% endblock %}
+
+{% block scripts %}
 <script>
-/**
- * Carga la tabla con el botón de editar centralizado en la columna Actions
- */
 function loadRecordings() {
     fetch('/api/recordings/list')
         .then(res => res.json())
@@ -186,7 +187,6 @@ function loadRecordings() {
                 return;
             }
 
-            // Ordenado: Fecha (Desc), ID (Desc), Parte (Asc)
             files.sort((a, b) => {
                 const dateA = new Date(a.date_start || 0);
                 const dateB = new Date(b.date_start || 0);
@@ -196,7 +196,6 @@ function loadRecordings() {
                 return a.part - b.part;
             });
 
-            // Función para formatear las fechas como texto simple (sin botones)
             const formatDT = (dateStr) => {
                 if (!dateStr) return '<span class="text-muted">-</span>';
                 const d = new Date(dateStr);
@@ -208,11 +207,10 @@ function loadRecordings() {
                 const hasFile = file.filename && file.filename.trim() !== "";
                 const isPending = file.status === 'pending';
                 const isRecording = file.status === 'recording';
-				const isConverting = file.status === 'converting';
+                const isConverting = file.status === 'converting';
                 const pId = file.program_id || 'null';
                 const fName = hasFile ? `'${file.filename}'` : 'null';
 
-                // Etiqueta de Parte
                 const partBadge = (file.part && file.part > 0) 
                     ? `<span class="badge rounded-pill bg-light text-dark border ms-2" style="font-size: 0.65rem;">Parte ${file.part}</span>` 
                     : "";
@@ -221,53 +219,46 @@ function loadRecordings() {
                     ? `<span>${file.filename}${partBadge}</span>` 
                     : `<span class="text-muted">${file.title}</span>`;
 
-                // Badge de Estado
                 let statusBadge = '';
                 switch(file.status) {
                     case 'completed': statusBadge = '<span class="badge bg-success">COMPLETED</span>'; break;
                     case 'recording': statusBadge = '<span class="badge pulse-red text-white">RECORDING</span>'; break;
                     case 'failed':    statusBadge = '<span class="badge bg-warning text-dark">FAILED</span>'; break;
                     case 'pending':   statusBadge = '<span class="badge bg-info text-dark">PENDING</span>'; break;
-					case 'converting': statusBadge = '<span class="badge bg-warning text-dark"><i class="bi bi-gear-fill spin"></i>CONVERTING</span>'; break;
+                    case 'converting': statusBadge = '<span class="badge bg-warning text-dark"><i class="bi bi-gear-fill spin"></i>CONVERTING</span>'; break;
                     default:          statusBadge = '<span class="badge bg-secondary">UNKNOWN</span>';
                 }
 
-                // LÓGICA DE BOTONES EN COLUMNA ACTIONS
                 let actionButtons = "";
                 const fileJson = JSON.stringify(file).replace(/'/g, "&apos;");
 
-                // 1. Botón de EDITAR (Verde) - Solo si es pending o recording
                 if (isPending || isRecording) {
                     actionButtons += `
-                        <button class="btn btn-success btn-sm shadow-sm" onclick='openEditModal(${fileJson})' title="Edit schedule">
+                        <button class="btn btn-success btn-sm shadow-sm rounded-pill px-2 py-1" onclick='openEditModal(${fileJson})' title="Edit schedule">
                             <i class="bi bi-pencil-square"></i>
                         </button>`;
-                }		
+                }        
 
-                // 2. Botones de Control (Stop / Play / Download)
                 if (isRecording) {
-                    actionButtons += `<button class="btn btn-sm btn-danger shadow-sm ms-1" onclick="stopRecording(${pId})"><i class="bi bi-stop-fill"></i> Stop</button>`;
-				} else if (isConverting) {
-					actionButtons += `<button class="btn btn-sm btn-secondary ms-1" disabled><i class="bi bi-hourglass-split"></i> Wait</button>`;
+                    actionButtons += `<button class="btn btn-sm btn-danger rounded-pill shadow-sm ms-1 px-3" onclick="stopRecording(${pId})"><i class="bi bi-stop-fill me-1"></i> Stop</button>`;
+                } else if (isConverting) {
+                    actionButtons += `<button class="btn btn-sm btn-secondary rounded-pill ms-1 px-3" disabled><i class="bi bi-hourglass-split me-1"></i> Wait</button>`;
                 } else if (hasFile) {
                     actionButtons += `
-                        <button class="btn btn-sm btn-primary ms-1" onclick="playVideo('${file.filename}', '${file.status}')"><i class="bi bi-play-fill"></i></button>
-                        <a href="/api/recordings/download/${file.filename}" class="btn btn-sm btn-outline-success ms-1"><i class="bi bi-download"></i></a>`;
+                        <button class="btn btn-sm btn-primary rounded-pill ms-1 px-2" onclick="playVideo('${file.filename}', '${file.status}')" title="Play"><i class="bi bi-play-fill"></i></button>
+                        <a href="/api/recordings/download/${file.filename}" class="btn btn-sm btn-outline-success rounded-pill ms-1 px-2" title="Download"><i class="bi bi-download"></i></a>`;
                 }
 
-                // 3. Botón de BORRAR (Solo si no está grabando)
                 if (!isRecording && !isConverting) {
-					actionButtons += `<button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteRecording(${pId}, ${fName})"><i class="bi bi-trash"></i></button>`;
-				} else if (isConverting) {
-					// Opcional: Mostrar botón de borrar deshabilitado para que el usuario sepa que no puede ahora
-					actionButtons += `<button class="btn btn-sm btn-outline-secondary ms-1" disabled><i class="bi bi-trash"></i></button>`;
-				}
+                    actionButtons += `<button class="btn btn-sm btn-outline-danger rounded-pill ms-1 px-2" onclick="deleteRecording(${pId}, ${fName})" title="Delete"><i class="bi bi-trash"></i></button>`;
+                } else if (isConverting) {
+                    actionButtons += `<button class="btn btn-sm btn-outline-secondary rounded-pill ms-1 px-2" disabled><i class="bi bi-trash"></i></button>`;
+                }
 
                 return `
                 <tr>
-                    <td>
-                        <div class="fw-bold text-truncate" style="max-width: 320px; cursor: help;" 
-                             data-bs-toggle="tooltip" title="Program: ${file.title} | ID: ${file.program_id}">
+                    <td class="ps-3">
+                        <div class="fw-bold text-truncate" style="max-width: 320px;" title="Program: ${file.title} | ID: ${file.program_id}">
                             ${displayName}
                         </div>
                         <small class="text-muted" style="font-size: 0.7rem;">Prog ID: ${file.program_id}</small>
@@ -276,23 +267,17 @@ function loadRecordings() {
                     <td><span class="badge border text-dark bg-light">${file.size_display || '0 MB'}</span></td>
                     <td>${formatDT(file.date_start)}</td>
                     <td>${formatDT(file.date_end)}</td>
-                    <td class="text-end">
+                    <td class="text-end pe-3">
                         <div class="btn-group shadow-sm">
                             ${actionButtons}
                         </div>
                     </td>
                 </tr>`;
             }).join('');
-
-            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.map(tEl => new bootstrap.Tooltip(tEl));
         })
         .catch(err => console.error("Load error:", err));
 }
 
-/**
- * Función para parar la grabación
- */
 function stopRecording(programId) {
     if (!confirm("Are you sure you want to stop this recording?")) return;
 
@@ -304,9 +289,6 @@ function stopRecording(programId) {
         .catch(err => console.error("Stop error:", err));
 }
 
-/**
- * Lógica del reproductor modal
- */
 function playVideo(filename, status) {
     const video = document.getElementById('videoPlayer');
     const modalElement = document.getElementById('videoModal');
@@ -315,13 +297,11 @@ function playVideo(filename, status) {
     video.src = `/api/recordings/stream/${filename}`;
     
     if (status === 'recording') {
-        // Si el vídeo se detiene porque llegó al final de lo que había descargado
         video.onended = function() {
-            // Esperamos un segundo a que haya más datos en el disco
             setTimeout(() => {
                 const current = video.currentTime;
-                video.load(); // Recarga el recurso para ver el nuevo tamaño
-                video.currentTime = current; // Vuelve a donde estaba
+                video.load();
+                video.currentTime = current;
                 video.play();
             }, 1000);
         };
@@ -339,18 +319,10 @@ function stopVideo() {
     video.src = "";
 }
 
-// Asegurar que el video se detiene si se cierra el modal con ESC
-document.getElementById('videoModal').addEventListener('hidden.bs.modal', stopVideo);
-
-/**
- * 1. Abre el modal y separa el ISO en Fecha y Hora
- */
 function openEditModal(file) {
-    // Título y ID
     document.getElementById('editProgramTitle').innerText = file.title || "Program";
     document.getElementById('editProgramId').value = file.program_id;
     
-    // Función para formatear fecha (YYYY-MM-DD) y hora (HH:mm) para los inputs
     const splitDT = (dateStr) => {
         if (!dateStr) return { d: '', t: '' };
         const dateObj = new Date(dateStr);
@@ -364,27 +336,21 @@ function openEditModal(file) {
     const start = splitDT(file.date_start);
     const end = splitDT(file.date_end);
 
-    // Asignar valores a los 4 inputs
     document.getElementById('editStartDate').value = start.d;
     document.getElementById('editStartTime').value = start.t;
     document.getElementById('editEndDate').value = end.d;
     document.getElementById('editEndTime').value = end.t;
 
-    // Lógica de bloqueo si está grabando
     const isRec = file.status === 'recording';
     document.getElementById('editStartDate').readOnly = isRec;
     document.getElementById('editStartTime').readOnly = isRec;
     document.getElementById('startWarning').classList.toggle('d-none', !isRec);
 
-    // Resetear validación y mostrar modal
     validateTimes();
     const modal = new bootstrap.Modal(document.getElementById('editTimeModal'));
     modal.show();
 }
 
-/**
- * 2. Ajusta la hora sumando/restando minutos (Botones +/-)
- */
 function adjustTime(inputId, minutes) {
     const input = document.getElementById(inputId);
     if (input.readOnly || input.disabled) return;
@@ -394,12 +360,9 @@ function adjustTime(inputId, minutes) {
     date.setHours(hrs, mins + minutes);
     
     input.value = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-    validateTimes(); // Validar tras el ajuste
+    validateTimes();
 }
 
-/**
- * 3. Valida que el fin sea posterior al inicio y bloquea el botón Guardar
- */
 function validateTimes() {
     const startD = document.getElementById('editStartDate').value;
     const startT = document.getElementById('editStartTime').value;
@@ -423,9 +386,6 @@ function validateTimes() {
     }
 }
 
-/**
- * 4. Envía los cambios a la API (Uniendo los inputs)
- */
 function saveNewTimes() {
     const pId = document.getElementById('editProgramId').value;
     const startD = document.getElementById('editStartDate').value;
@@ -448,7 +408,7 @@ function saveNewTimes() {
             const modalEl = document.getElementById('editTimeModal');
             const modalInstance = bootstrap.Modal.getInstance(modalEl);
             if (modalInstance) modalInstance.hide();
-            loadRecordings(); // Refrescar tabla
+            loadRecordings();
         } else {
             alert("Error saving changes.");
         }
@@ -456,11 +416,7 @@ function saveNewTimes() {
     .catch(err => console.error("Error in saveNewTimes:", err));
 }
 
-/**
- * Borrado
- */
 function deleteRecording(programId, filename) {
-    // 1. Caso: Solo programación (sin archivo)
     if (!filename || filename === 'null') {
         if (!confirm(`Delete schedule ID: ${programId}?`)) return;
         fetch(`/api/recordings/schedule/${programId}`, { method: 'DELETE' })
@@ -468,45 +424,22 @@ function deleteRecording(programId, filename) {
         return;
     }
 
-    // 2. Caso: Archivo físico
     if (!confirm(`Delete the file ${filename}?`)) return;
 
     fetch(`/api/recordings/delete/${filename}`, { method: 'DELETE' })
         .then(res => {
             if (res.ok) {
-                /* 
-                   BUSCAMOS SI QUEDA ALGUNA PARTE GRABANDO:
-                   Filtramos las filas de la tabla para ver si hay algún badge 'pulse-red'
-                   que pertenezca a este mismo Program ID.
-                */
-                const rows = document.querySelectorAll('#recordingsTable tr');
-                let remainsActive = false;
-
-                rows.forEach(row => {
-                    // Verificamos si la fila es la del programa actual y si tiene el pulso rojo
-                    const hasId = row.querySelector(`[title*="ID: ${programId}"]`) || 
-                                  row.innerText.includes(`Prog ID: ${programId}`);
-                    const isRecording = row.querySelector('.pulse-red');
-                    
-                    if (hasId && isRecording) remainsActive = true;
-                });
-
-                if (!remainsActive) {
-                    // Si ya no se está grabando ninguna parte de este programa, limpiamos el schedule
-                    fetch(`/api/recordings/schedule/${programId}`, { method: 'DELETE' })
-                        .then(() => loadRecordings());
-                } else {
-                    // Si el programa sigue grabando en otra parte, solo refrescamos la vista
-                    loadRecordings();
-                }
+                loadRecordings();
             }
         })
         .catch(err => console.error("Error en borrado:", err));
 }
 
-// Eventos y ciclos
 document.addEventListener('DOMContentLoaded', loadRecordings);
-document.getElementById('videoModal').addEventListener('hidden.bs.modal', stopVideo);
+const videoModalEl = document.getElementById('videoModal');
+if (videoModalEl) {
+    videoModalEl.addEventListener('hidden.bs.modal', stopVideo);
+}
 setInterval(() => {
     if (document.querySelector('.pulse-red')) loadRecordings();
 }, 30000);

@@ -1,132 +1,41 @@
 # Requirements
 
-This page outlines the requirements for running Acestream Scraper.
+## Docker deployment
 
-## System Requirements
+The recommended deployment requires Docker Engine or Docker Desktop with the Docker Compose plugin. The repository image targets Linux containers. Windows users can run it through Docker Desktop with Linux containers enabled.
 
-### Hardware Requirements
+For the optional Cloudflare WARP tunnel, the container needs access to `/dev/net/tun`, `NET_ADMIN` and `SYS_ADMIN` capabilities, and the configured network sysctls. The provided Compose file shows these settings.
 
-Minimum specifications for running Acestream Scraper:
+## Manual deployment
 
-| Component | Minimum | Recommended |
-|-----------|---------|------------|
-| CPU | 1 core | 2+ cores |
-| RAM | 512MB | 1GB+ |
-| Storage | 1GB | 5GB+ |
-| Network | 10 Mbps | 100+ Mbps |
+- Python 3.10 or newer
+- Dependencies from `requirements.txt` and `requirements-prod.txt`
+- A WSGI server (the container uses Gunicorn)
+- FFmpeg for recording capture and processing
+- External stream/ZeroNet services if you need features provided by the bundled Docker processes
 
-### Operating System Support
+The manual app does not start Outpace, ZeroNet, Tor, or the bundled AceStream search engine automatically.
 
-Acestream Scraper can run on any system that supports Docker:
+## Network ports
 
-- **Linux**: All major distributions (Ubuntu, Debian, CentOS, Fedora, etc.)
-- **macOS**: 10.14 (Mojave) or newer
-- **Windows**: Windows 10/11 with Docker Desktop
+Publish only the ports your deployment needs:
 
-For manual installation (without Docker), a Linux-compatible environment is recommended.
+| Port | Service | When needed |
+|---:|---|---|
+| `8040` | Flask web UI/API | Always |
+| `6878`, `6879` | Outpace main/checker HTTP listeners | Stream handling and checks |
+| `8621`, `8622` | Outpace peer listeners | P2P streaming |
+| `6880`, `8625` | AceStream search HTTP/P2P | When `ENABLE_ACESTREAM_SEARCH=true` |
+| `43110` | ZeroNet UI | ZeroNet |
+| `43111`, `26552` | ZeroNet peers | ZeroNet networking |
+| `1935` | Outpace RTMP | Only if using RTMP |
 
-## Software Requirements
+The current Compose file publishes a subset of these ports. Check that file before making any port reachable outside your trusted network.
 
-### Docker Installation
+## Persistent storage
 
-If using Docker (recommended approach):
+Mount and back up `/app/config`, `/app/config/recordings`, and `/app/ZeroNet/data`. Space usage depends on the database, ZeroNet activity, and the size and duration of recordings.
 
-- **Docker**: Version 19.03 or newer
-- **Docker Compose**: Version 1.27.0 or newer (if using docker-compose)
-- **Docker Capabilities**: NET_ADMIN, SYS_ADMIN, DEVICES and SYSCTLS (only if using Cloudflare WARP)
+## Network access
 
-### Manual Installation
-
-If installing directly on the host:
-
-- **Python**: 3.10 or higher
-- **pip**: Latest version
-- **Git**: For cloning the repository (optional)
-- **Virtual Environment**: Recommended for isolation
-
-### External Dependencies
-
-These may be needed depending on your configuration:
-
-- **Acestream Engine**: If not using the built-in engine
-- **ZeroNet**: Built-in, but requires connection to ZeroNet network
-- **Tor**: Optional, for anonymous ZeroNet connections
-- **Cloudflare WARP**: Optional, for enhanced privacy and geo-unblocking
-
-## Network Requirements
-
-### Ports
-
-The following ports need to be available on your system:
-
-| Port | Service | Required |
-|------|---------|----------|
-| 8040 | Web interface | Yes |
-| 8080 | Acexy proxy | Only if enabled |
-| 6878 | Acestream Engine | Only if built-in engine is enabled |
-| 43110 | ZeroNet Web UI | Only if using ZeroNet |
-| 43111 | ZeroNet transport | Only if using ZeroNet |
-| 26552 | ZeroNet peer | Only if using ZeroNet |
-| 8621 | Acestream P2P | Only if built-in engine is enabled |
-
-### Connectivity
-
-- **Internet connection**: Required for scraping URLs and connecting to Acestream network
-- **Firewall rules**: Allow outbound connections for Acestream P2P functionality
-- **Port forwarding**: May be required for optimal Acestream Engine performance
-
-## Browser Support
-
-The web interface is compatible with:
-
-- **Chrome/Chromium**: Version 90+
-- **Firefox**: Version 90+
-- **Safari**: Version 14+
-- **Edge**: Version 90+
-
-## Media Player Requirements
-
-To use the generated playlists:
-
-### Direct Acestream Protocol
-
-If using `acestream://` URLs:
-- Acestream Engine installed locally
-- Media player with Acestream protocol support or appropriate plugin
-
-### HTTP Streaming
-
-If using HTTP URLs:
-- Any media player supporting M3U playlists and HTTP streams (VLC, Kodi, etc.)
-- Network access to the Acestream Engine (local or remote)
-
-## Storage Requirements
-
-- **Database**: SQLite database grows based on number of channels (typically <50MB)
-- **ZeroNet data**: Can grow to several GB if using ZeroNet extensively
-- **Logs**: Rotation enabled, typically <100MB
-
-## Development Requirements
-
-Additional requirements for development work:
-
-- **Python development tools**: python-dev, build-essential
-- **Testing tools**: pytest, coverage
-- **Code quality tools**: flake8, black, isort
-
-## Environment Variables (Canonical Reference)
-For deployments, ensure these env vars are documented and match your environment:
-
-| Variable | Default | Description |
-|---|---:|---|
-| `DOCKER_ENV` | (unset) | When set, container uses `/app/config` for config and DB. |
-| `ENABLE_ACEXY` | `true` | Enable PyAcexy proxy. |
-| `ACEXY_HOST` | `localhost` | Host/IP where PyAcexy should connect. |
-| `ACEXY_PORT` | `6878` | Port of the Acestream Engine. |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. |
-| `ACESTREAM_HTTP_PORT` | `6878` | Main engine HTTP port; background uses `6879`. |
-| `CHECKSTATUS_ENABLED` | `true` | Controls automatic stream checks. |
-
-- `DOCKER_ENV`, `ENABLE_ACEXY`, `ENABLE_ACESTREAM_ENGINE`, `CHECKSTATUS_ENABLED`, `ACESTREAM_HTTP_PORT`, `ACEXY_HOST`, `ACEXY_PORT`, `ACEXY_BUFFER_SIZE`.
-
-These affect ports, background checks and whether internal engines are started; include them in your deployment checklist.
+Scraping requires access to the configured sources. Stream checks and playback require a reachable backend and network access to the relevant peers. EPG refresh needs outbound access to configured XMLTV URLs.

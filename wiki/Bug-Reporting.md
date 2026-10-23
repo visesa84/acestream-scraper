@@ -1,163 +1,39 @@
 # Bug Reporting Guide
 
-Encountering bugs is an inevitable part of software development. This guide will help you report bugs effectively so they can be resolved quickly.
+Before reporting an issue:
 
-## Before Reporting a Bug
+1. Reproduce it on the version/image you are actually running.
+2. Check the [FAQ](FAQ.md) and search existing project issues.
+3. Collect logs and the exact configuration needed to reproduce the behavior.
 
-Before submitting a new bug report, please:
+## Include these details
 
-1. **Update to the latest version** - Many bugs are fixed in newer releases:
-   ```bash
-   # If using Docker Compose
-   docker-compose pull
-   docker-compose up -d
-   
-   # If using Docker directly
-   docker pull visesa84/acestream-scraper-pyacexy:latest
-   docker stop acestream-scraper
-   docker rm acestream-scraper
-   # Then run your container again with the same configuration
-   ```
+- Image tag or source revision, deployment method, and host OS.
+- Docker and Compose versions when applicable.
+- The page or API endpoint involved, expected behavior, and actual behavior.
+- Minimal steps to reproduce, frequency, and relevant screenshots.
+- Which optional services are enabled (Tor, WARP, AceStream search) and which stream mode is selected.
+- Relevant Compose settings with credentials, license keys, private URLs, and personal data removed.
 
-2. Check the [FAQ](FAQ.md) to see if your issue is already addressed
-3. Search existing [GitHub Issues](https://github.com/visesa84/acestream-scraper-PyAcexy/issues) to avoid duplicates
-4. Try basic troubleshooting steps mentioned in the FAQ
+Do not post passwords, tokens, WARP license keys, private source URLs, or complete database files. Redact public IPs and other identifying information where appropriate.
 
-## Required Information
+## Collect useful diagnostics
 
-### Version Details
-
-Always include the exact version you're using:
-
-- **Docker image tag**: (e.g., `visesa84/acestream-scraper-pyacexy:latest`, `visesa84/acestream-scraper-pyacexy:1.2.3`)
-  ```bash
-  docker inspect visesa84/acestream-scraper-pyacexy:latest | grep "Image ID"
-  ```
-  
-- **Version in web interface**: Check the footer of the web interface which should display the current version
-
-### Environment Information
-
-- **Operating System**: (e.g., Ubuntu 22.04, Windows 11, macOS 13)
-- **Docker version**:
-  ```bash
-  docker --version
-  ```
-- **Docker Compose version** (if applicable):
-  ```bash
-  docker-compose --version
-  ```
-- **Browser and version** (if UI-related): (e.g., Chrome 114, Firefox 115)
-
-### Deployment Method
-
-Describe how you deployed the application:
-
-- Docker Compose
-- Direct Docker run command
-- Manual installation
-- Include your `docker-compose.yml` file or Docker run command with sensitive information removed
-
-### Problem Description
-
-1. **Clear summary**: A concise description of the issue
-2. **Steps to reproduce**: Numbered, specific steps that lead to the bug
-   ```
-   1. Navigate to http://localhost:8040
-   2. Click on "Add URL"
-   3. Enter URL: example.com
-   4. Click submit
-   ```
-3. **Expected behavior**: What should happen
-4. **Actual behavior**: What actually happens
-5. **Frequency**: Does it happen every time or intermittently?
-6. **Screenshots**: If applicable, especially for UI issues
-
-## How to Collect Logs
-
-Logs are crucial for diagnosing issues. Here's how to collect them:
-
-### Docker Container Logs
-
-```bash
-# Last 100 lines
-docker logs --tail 100 acestream-scraper
-
-# All logs since container start
-docker logs acestream-scraper > acestream-scraper-logs.txt
-
-# Logs with timestamps
-docker logs --timestamps acestream-scraper
+```powershell
+docker compose ps
+docker compose logs --tail 200 acestream-scraper
 ```
 
-### Application-Specific Logs
+To see container health:
 
-The application logs are stored inside the container at `/app/logs`:
-
-```bash
-# Copy logs from container to host
-docker cp acestream-scraper:/app/logs ./acestream-scraper-logs
-
-# View specific log file
-docker exec acestream-scraper cat /app/logs/app.log
+```powershell
+docker inspect --format='{{json .State.Health}}' Acestream_Proxy
 ```
 
-### Health Check Information
+The application health resource is `http://localhost:8040/api/health/`. The container healthcheck is run by `/app/healthcheck.sh`; it is not the same route as the API resource.
 
-```bash
-curl http://localhost:8040/health
-```
+The container writes service logs under `/app/logs`, including the application, Outpace, ZeroNet, migration, and optional AceStream search logs. Retrieve only the relevant log files and redact sensitive values before sharing.
 
-## Common Debugging Steps
+## Report
 
-Try these steps to gather more information about your issue:
-
-1. **Check Acestream Engine status**:
-   ```bash
-   curl http://localhost:6878/server/version
-   ```
-
-2. **Check Acexy status** (if enabled):
-   ```bash
-   curl http://localhost:8080/ace/status
-   ```
-
-3. **Check database integrity**:
-   ```bash
-   docker exec acestream-scraper python -c "from app.extensions import db; print('Database connection:', db.engine.connect())"
-   ```
-
-4. **Verify network connectivity** (if channels are offline):
-   ```bash
-   docker exec acestream-scraper ping -c 3 google.com
-   ```
-
-## Submitting Your Bug Report
-
-1. Go to [GitHub Issues](https://github.com/visesa84/acestream-scraper-PyAcexy/issues)
-2. Click "New Issue"
-3. Choose "Bug Report" template if available
-4. Fill in the details using the information you've gathered
-5. Use a descriptive title that summarizes the issue
-6. Submit the issue
-
-## Environment Variables (Canonical Reference)
-
-When filing bug reports, include the values of the following environment variables to help reproduction:
-
-| Variable | Default | Description |
-|---|---:|---|
-| `DOCKER_ENV` | (unset) | When set, container uses `/app/config` for config and DB. |
-| `ENABLE_ACEXY` | `true` | PyAcexy proxy enabled. |
-| `ACEXY_HOST` | `localhost` | Host/IP for PyAcexy engine connections. |
-| `ACEXY_PORT` | `6878` | Port for Acestream Engine. |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. |
-| `ACESTREAM_HTTP_PORT` | `6878` | Main engine HTTP port; background uses `6879`. |
-| `CHECKSTATUS_ENABLED` | `true` | Controls automatic stream checks; may be forced off by entrypoint. |
-| `FLASK_PORT` | `8040` | Flask application port. |
-
-Providing these values speeds up diagnosis of environment-specific failures.
-
-## Bug Report Template
-
-Use this template to structure your bug report:
+Open an issue in the project tracker and provide the information above. Include a small sanitized example of the source structure if a scraper fails; do not include the real source URL unless you have permission to disclose it.

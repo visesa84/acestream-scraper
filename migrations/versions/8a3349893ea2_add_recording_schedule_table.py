@@ -1,7 +1,7 @@
 """Add recording_schedule table
 
 Revision ID: 8a3349893ea2
-Revises: 20250412_add_epg_channels_update_tv_channels
+Revises: epg_programs_table
 Create Date: 2026-03-13 07:50:49.136342
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '8a3349893ea2'
-down_revision = '20250412_add_epg_channels_update_tv_channels'
+down_revision = 'epg_programs_table'
 branch_labels = None
 depends_on = None
 

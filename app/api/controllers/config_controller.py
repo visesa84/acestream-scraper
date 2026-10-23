@@ -6,7 +6,6 @@ from app.repositories import SettingsRepository
 from app.utils.config import Config
 from app.extensions import db
 import logging
-from app.services.acestream_status_service import AcestreamStatusService
 from app.models.acestream_channel import AcestreamChannel
 
 logger = logging.getLogger(__name__)
@@ -14,15 +13,11 @@ logger = logging.getLogger(__name__)
 api = Namespace('config', description='Configuration management')
 
 base_url_model = api.model('BaseURL', {
-    'base_url': fields.String(required=True, description='Base URL for acestream links')
+    'base_url': fields.String(required=False, description='Base URL for acestream links')
 })
 
-addpid_model = api.model('AddPid', {
-    'addpid': fields.Boolean(required=True, description='Whether to add PID parameter to URLs')
-})
-
-ace_engine_url_model = api.model('AceEngineURL', {
-    'ace_engine_url': fields.String(required=True, description='URL for Acestream Engine')
+stream_mode_model = api.model('StreamMode', {
+    'stream_mode': fields.String(required=True, description='Stream playback mode (traditional or hls)')
 })
 
 rescrape_interval_model = api.model('RescrapeInterval', {
@@ -32,36 +27,6 @@ rescrape_interval_model = api.model('RescrapeInterval', {
 checkstatus_interval_model = api.model('CheckStatusInterval', {
     'hours': fields.Integer(required=True, description='Hours between automatic rescans'),
     'enabled': fields.Boolean(required=True, description='Whether automatic status check is enabled')
-})
-
-stream_info_model = api.model('StreamInfo', {
-    'id': fields.String(attribute='id'),
-    'nombre': fields.String(attribute='nombre')
-})
-
-acexy_status_model = api.model('AcexyStatus', {
-    'enabled': fields.Boolean(),
-    'available': fields.Boolean(),
-    'message': fields.String(),
-    'active_streams': fields.Integer(),
-    'streams_list': fields.List(fields.Nested(stream_info_model)) # Importante: Nested
-})
-
-acestream_status_model = api.model('AcestreamStatus', {
-    'enabled': fields.Boolean(description='Whether Acestream Engine is enabled'),
-    'available': fields.Boolean(description='Whether Acestream Engine is available'),
-    'message': fields.String(description='Status message'),
-    'version': fields.String(description='Acestream Engine version'),
-    'platform': fields.String(description='Platform'),
-    'playlist_loaded': fields.Boolean(description='Whether playlist is loaded'),
-    'connected': fields.Boolean(description='Whether engine is connected to network'),
-    # AÑADE ESTOS DOS:
-    'is_internal': fields.Boolean(description='Whether the engine is internal'),
-    'engine_url': fields.String(description='The URL of the engine')
-})
-
-status_check_interval_model = api.model('StatusCheckInterval', {
-    'interval': fields.Integer(required=True, description='Check interval in seconds')
 })
 
 @api.route('/base_url')
@@ -74,41 +39,38 @@ class BaseURL(Resource):
     @api.doc('update_base_url')
     @api.expect(base_url_model)
     def put(self):
-        """Update base URL for acestream links."""
-        data = request.json
-        base_url = data.get('base_url')
-        
-        if not base_url:
-            api.abort(400, "base_url is required")
+        """Update base URL for acestream links (now optional)."""
+        data = request.json or {}
+        base_url = data.get('base_url', '')
         
         try:
             config = Config()
-            config.base_url = base_url
+            config.base_url = base_url.strip()
             return {"message": "Base URL updated successfully"}
         except Exception as e:
             api.abort(500, str(e))
 
-@api.route('/ace_engine_url')
-class AceEngineURL(Resource):
+@api.route('/stream_mode')
+class StreamMode(Resource):
     def get(self):
-        """Get the current Ace Engine URL."""
+        """Get the current stream mode."""
         config = Config()
-        return {"ace_engine_url": config.ace_engine_url}, 200
+        return {"stream_mode": config.stream_mode}, 200
         
-    @api.doc('update_ace_engine_url')
-    @api.expect(ace_engine_url_model)
+    @api.doc('update_stream_mode')
+    @api.expect(stream_mode_model)
     def put(self):
-        """Update Acestream Engine URL."""
-        data = request.json
-        ace_engine_url = data.get('ace_engine_url')
+        """Update stream playback mode (traditional or hls)."""
+        data = request.json or {}
+        mode = data.get('stream_mode')
         
-        if not ace_engine_url:
-            api.abort(400, "ace_engine_url is required")
+        if mode not in ('traditional', 'hls'):
+            api.abort(400, "Invalid stream mode. Must be 'traditional' or 'hls'")
         
         try:
             config = Config()
-            config.ace_engine_url = ace_engine_url
-            return {"message": "Ace Engine URL updated successfully"}
+            config.stream_mode = mode
+            return {"message": "Stream mode updated successfully", "stream_mode": mode}
         except Exception as e:
             api.abort(500, str(e))
 
@@ -149,7 +111,7 @@ class CheckStatusInterval(Resource):
             config = Config()
             return {
                 "hours": config.checkstatus_interval,
-                "enabled": config.checkstatus_enabled  # Añadimos el estado aquí
+                "enabled": config.checkstatus_enabled
             }
         except Exception as e:
             api.abort(500, str(e))
@@ -173,89 +135,6 @@ class CheckStatusInterval(Resource):
         except Exception as e:
             api.abort(500, str(e))
 
-
-@api.route('/acexy_status')
-class AcexyStatus(Resource):
-    @api.doc('get_acexy_status')
-    @api.marshal_with(acexy_status_model)
-    def get(self):
-        """Obtiene el estado de Acexy y la lista de IDs que se están reproduciendo."""
-        try:
-            # 1. Verificar si está habilitado en las variables de entorno
-            enabled_env = os.environ.get('ENABLE_ACEXY', 'false').lower() == 'true'
-            
-            if not enabled_env:
-                return {
-                    "enabled": False,
-                    "available": False,
-                    "message": "Acexy is not enabled in this environment",
-                    "active_streams": 0,
-                    "streams_list": []
-                }
-            
-            # 2. Construir la URL de consulta al proxy (puerto por defecto 8080)
-            acexy_addr = os.environ.get('ACEXY_LISTEN_ADDR', ':8080')
-            # Extraemos el puerto (ej: de ":8080" a "8080")
-            port = acexy_addr.split(':')[-1] if ':' in acexy_addr else "8080"
-            acexy_url = f"http://localhost:{port}/ace/status"
-            
-            # 3. Petición al servicio Acexy (inyectado previamente vía Docker)
-            try:
-                response = requests.get(acexy_url, timeout=2)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    active_count = data.get('total_active_streams', 0)
-                    raw_streams = data.get('streams', [])
-                    
-                    enriched_list = []
-                    for s in raw_streams:
-                        sid = s['id']
-                        # Buscamos por la columna 'id' del modelo AcestreamChannel
-                        canal = AcestreamChannel.query.filter_by(id=sid).first()
-                        
-                        enriched_list.append({
-                            "id": sid,
-                            "nombre": canal.name if canal else f"Desconocido ({sid[:6]}...)"
-                        })
-                    
-                    return {
-                        "enabled": True,
-                        "available": True,
-                        "message": f"Acexy online ({active_count} streams)",
-                        "active_streams": active_count,
-                        "streams_list": enriched_list
-                    }
-                
-                # Error HTTP (ej: 404 o 500)
-                return {
-                    "enabled": True,
-                    "available": False,
-                    "message": f"Acexy error HTTP {response.status_code}",
-                    "active_streams": 0,
-                    "streams_list": []
-                }
-
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Unable to connect to PyAcexy: {str(e)}")
-                return {
-                    "enabled": True,
-                    "available": False,
-                    "message": "Acexy connection timeout/error",
-                    "active_streams": 0,
-                    "streams_list": []
-                }
-
-        except Exception as e:
-            logger.error(f"Fatal error in PyAcexyStatus API: {str(e)}")
-            return {
-                "enabled": True,
-                "available": False,
-                "message": "Internal API Error",
-                "active_streams": 0,
-                "streams_list": []
-            }
-
 @api.route('/setup_completed')
 class SetupCompleted(Resource):
     @api.doc('mark_setup_completed')
@@ -278,102 +157,4 @@ class SetupCompleted(Resource):
             
         except Exception as e:
             logger.error(f"Error updating setup status: {e}")
-            api.abort(500, str(e))
-
-@api.route('/acestream_status')
-class AcestreamStatus(Resource):
-    @api.doc('get_acestream_status')
-    @api.marshal_with(acestream_status_model)
-    def get(self):
-        """Get Acestream Engine status."""
-        config = Config()
-        
-        # Create service instance and get status
-        service = AcestreamStatusService(engine_url=config.ace_engine_url)
-        status = service.check_status()
-        
-        return status
-
-@api.route('/addpid')
-class AddPid(Resource):
-    @api.doc('get_addpid')
-    def get(self):
-        """Get whether to add PID parameter to URLs."""
-        try:
-            config = Config()
-            return {"addpid": config.addpid}
-        except Exception as e:
-            api.abort(500, str(e))
-    
-    @api.doc('update_addpid')
-    @api.expect(addpid_model)
-    def put(self):
-        """Update whether to add PID parameter to URLs."""
-        data = request.json
-        addpid = data.get('addpid')
-        
-        if addpid is None:
-            api.abort(400, "addpid is required")
-        
-        try:
-            config = Config()
-            config.addpid = addpid
-            return {"message": "PID parameter setting updated successfully"}
-        except Exception as e:
-            api.abort(500, str(e))
-
-@api.route('/acexy_check_interval')
-class AcexyCheckInterval(Resource):
-    @api.doc('get_acexy_check_interval')
-    def get(self):
-        """Get Acexy status check interval."""
-        try:
-            # Get from localStorage via cookie or use default
-            default_interval = 60  # Default to 60 seconds
-            return {"interval": default_interval}
-        except Exception as e:
-            api.abort(500, str(e))
-    
-    @api.doc('update_acexy_check_interval')
-    @api.expect(status_check_interval_model)
-    def put(self):
-        """Update Acexy status check interval."""
-        data = request.json
-        interval = data.get('interval')
-        
-        if interval is None or interval < 5:  # Minimum 5 seconds
-            api.abort(400, "interval must be at least 5 seconds")
-        
-        try:
-            # Store in config (will be handled client-side with localStorage)
-            return {"message": "Acexy check interval updated successfully"}
-        except Exception as e:
-            api.abort(500, str(e))
-
-@api.route('/acestream_check_interval')
-class AcestreamCheckInterval(Resource):
-    @api.doc('get_acestream_check_interval')
-    def get(self):
-        """Get Acestream Engine status check interval."""
-        try:
-            # Get from localStorage via cookie or use default
-            default_interval = 120  # Default to 120 seconds
-            return {"interval": default_interval}
-        except Exception as e:
-            api.abort(500, str(e))
-    
-    @api.doc('update_acestream_check_interval')
-    @api.expect(status_check_interval_model)
-    def put(self):
-        """Update Acestream Engine status check interval."""
-        data = request.json
-        interval = data.get('interval')
-        
-        if interval is None or interval < 5:  # Minimum 5 seconds
-            api.abort(400, "interval must be at least 5 seconds")
-        
-        try:
-            # Store in config (will be handled client-side with localStorage)
-            return {"message": "Acestream Engine check interval updated successfully"}
-        except Exception as e:
             api.abort(500, str(e))

@@ -194,6 +194,7 @@ async function refreshChannelList(searchTerm, urlId) {
 }
 
 // Update the channel list with received data
+// Update the channel list with received data (Versión corregida para 5 columnas)
 function updateChannelList(channels) {
     const channelsList = document.getElementById('channelListContent');
     if (!channelsList) {
@@ -202,73 +203,67 @@ function updateChannelList(channels) {
     }
     
     if (!channels || channels.length === 0) {
-        channelsList.innerHTML = '<tr><td colspan="4" class="text-center">No channels found matching your filter criteria</td></tr>';
+        channelsList.innerHTML = '<tr><td colspan="5" class="text-center">No channels found matching your filter criteria</td></tr>';
         return;
     }
     
     channelsList.innerHTML = channels.map(channel => {
-        // Determine metadata styling based on EPG data completeness
-        let metadataClass = 'primary'; // Default blue (no metadata)
-        let tooltipText = 'Edit channel - No EPG data'; // Default tooltip
+        let metadataClass = 'primary'; 
+        let tooltipText = 'Edit channel - No EPG data'; 
         
-        // If locked, purple has priority
         if (channel.epg_update_protected) {
             metadataClass = 'purple';
             tooltipText = 'Edit channel - EPG locked (protected from automatic updates)';
-        }
-        // Otherwise evaluate metadata state
-        else if (channel.tvg_id && channel.tvg_name && channel.logo) {
-            metadataClass = 'success';  // Green - complete
+        } else if (channel.tvg_id && channel.tvg_name && channel.logo) {
+            metadataClass = 'success';  
             tooltipText = 'Edit channel - Complete EPG data';
-        } 
-        else if (channel.tvg_id || channel.tvg_name || channel.logo) {
-            metadataClass = 'warning';  // Amber - partial
+        } else if (channel.tvg_id || channel.tvg_name || channel.logo) {
+            metadataClass = 'warning';  
             tooltipText = 'Edit channel - Partial EPG data';
         }
         
-		const isActive = channel.status === 'active';
-		// Definimos los estilos en línea para la fila y el texto
-		const rowStyle = !isActive ? 'style="background-color: #f8f9fa; opacity: 0.7;"' : '';
-		const textStyle = !isActive ? 'style="text-decoration: line-through; color: #6c757d;"' : '';
-		
-        // Logo display
+        const isActive = channel.status === 'active';
+        const rowStyle = !isActive ? 'style="background-color: #f8f9fa; opacity: 0.7;"' : '';
+        const textStyle = !isActive ? 'style="text-decoration: line-through; color: #6c757d;"' : '';
+        
         const logoHtml = channel.logo ? 
-            `<img src="${channel.logo}" alt="Logo" class="channel-logo me-2" style="max-height:60px; max-width:60px;">` : 
+            `<img src="${channel.logo}" alt="Logo" class="channel-logo me-2" style="max-height:40px; max-width:40px;">` : 
             '';
             
         return `
         <tr class="${rowStyle}">
+            <!-- Columna 1: Nombre y Logo -->
             <td>
                 <div class="d-flex align-items-center" ${textStyle}>
                     ${logoHtml}
                     ${channel.name}
                 </div>
             </td>
+            <!-- Columna 2: Stream ID / Hash -->
             <td><code>${channel.id}</code></td>
+            <!-- Columna 3: Status / Info -->
             <td>
-                ${formatLocalDate(channel.last_processed)}
-                ${channel.last_checked ? `
-                    <br>
-                    <small class="text-muted">
-						Status: <span class="badge ${!isActive ? 'bg-secondary' : (channel.is_online ? 'bg-success' : 'bg-danger')}" 
-									  style="${!isActive ? 'background-color: #6c757d !important;' : ''}">
-							${!isActive ? 'Disabled' : (channel.is_online ? 'Online' : 'Offline')}
-						</span>
-						${(channel.check_error && isActive) ? `<br>Error: ${channel.check_error}` : ''}
-					</small>
-                ` : ''}
-            </td>            <td>
+                <span class="badge ${!isActive ? 'bg-secondary' : (channel.is_online ? 'bg-success' : 'bg-danger')}">
+                    ${!isActive ? 'Disabled' : (channel.is_online ? 'Online' : 'Offline')}
+                </span>
+                ${(channel.check_error && isActive) ? `<br><small class="text-danger">${channel.check_error}</small>` : ''}
+            </td>
+            <!-- Columna 4: Last Checked / Processed (Independiente) -->
+            <td class="small text-muted">
+                ${formatLocalDate(channel.last_checked || channel.last_processed)}
+            </td>
+            <!-- Columna 5: Acciones -->
+            <td>
                 <div class="btn-group">
-					<!-- BOTÓN ENABLE/DISABLE -->
-					<button class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-secondary'}" 
-							onclick="toggleChannelStatus('${channel.id}', '${channel.status}')" 
-							title="${isActive ? 'Deactivate' : 'Activate'}">
-						<svg xmlns="http://www.w3.org" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-							${isActive 
-								? '<path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>' 
-								: '<path d="m10.79 12.912-1.614-1.615a3.5 3.5 0 0 1-4.474-4.474l-2.06-2.06C.938 6.278 0 8 0 8s3 5.5 8 5.5a7.029 7.029 0 0 0 2.79-.588zM5.21 3.088A7.028 7.028 0 0 1 8 2.5c5 0 8 5.5 8 5.5s-.939 1.721-2.641 3.238l-2.047-2.047a3.5 3.5 0 0 0-4.474-4.474L5.21 3.089z"/><path d="M5.525 7.646a2.5 2.5 0 0 0 2.829 2.829l-2.83-2.829zm4.95.708-2.829-2.83a2.5 2.5 0 0 1 2.829 2.829zm3.171 6-12-12 .708-.708 12 12-.708.708z"/>'}
-						</svg>
-					</button>
+                    <button class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-secondary'}" 
+                            onclick="toggleChannelStatus('${channel.id}', '${channel.status}')" 
+                            title="${isActive ? 'Deactivate' : 'Activate'}">
+                        <svg xmlns="http://www.w3.org" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            ${isActive 
+                                ? '<path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/><path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>' 
+                                : '<path d="m10.79 12.912-1.614-1.615a3.5 3.5 0 0 1-4.474-4.474l-2.06-2.06C.938 6.278 0 8 0 8s3 5.5 8 5.5a7.029 7.029 0 0 0 2.79-.588zM5.21 3.088A7.028 7.028 0 0 1 8 2.5c5 0 8 5.5 8 5.5s-.939 1.721-2.641 3.238l-2.047-2.047a3.5 3.5 0 0 0-4.474-4.474L5.21 3.089z"/><path d="M5.525 7.646a2.5 2.5 0 0 0 2.829 2.829l-2.83-2.829zm4.95.708-2.829-2.83a2.5 2.5 0 0 1 2.829 2.829zm3.171 6-12-12 .708-.708 12 12-.708.708z"/>'}
+                        </svg>
+                    </button>
                     <button class="btn btn-sm btn-success" onclick="showPlayerOptions('${channel.id}')" title="Play stream">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-play-fill" viewBox="0 0 16 16">
                             <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
@@ -297,7 +292,6 @@ function updateChannelList(channels) {
         </tr>
     `}).join('');
     
-    // Update displayed channels count in stats
     const channelCount = document.getElementById('channelCount');
     if (channelCount) {
         channelCount.textContent = channels.length;

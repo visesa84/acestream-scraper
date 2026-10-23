@@ -74,7 +74,7 @@ class TaskManager:
         Este es el puente entre Flask y el TaskManager.
         Lanza la tarea en el background de asyncio de forma segura.
         """
-        # 👇 NUEVO: Capturamos dinámicamente la aplicación Flask si estamos dentro de una petición web
+        # Capturamos dinámicamente la aplicación Flask si estamos dentro de una petición web
         if has_app_context() and not self.app:
             self.app = current_app._get_current_object()
 

@@ -2,94 +2,71 @@
  * Setup wizard functionality for Acestream Scraper
  */
 
-// State management
 const setupState = {
     currentStep: 1,
     totalSteps: 6,
-    baseUrl: 'acestream://',
-    acexyEnabled: false,
-    aceEngineUrl: 'http://localhost:6878',
+    adminUser: { username: '', password: '' },
+    streamMode: 'traditional',
     rescrapeInterval: 24,
-	checkstatus_enabled: true,
+    checkstatus_enabled: true,
     checkstatus_interval: 24,
-    addpid: false,
     sources: []
 };
 
-// Show loading spinner
 function showLoading() {
-    document.getElementById('loading').style.display = 'flex';
+    const loading = document.getElementById('loading');
+    if (loading) loading.style.display = 'flex';
 }
 
-// Hide loading spinner
 function hideLoading() {
-    document.getElementById('loading').style.display = 'none';
+    const loading = document.getElementById('loading');
+    if (loading) loading.style.display = 'none';
 }
 
-// Switch to a specific step
 function goToStep(stepNumber) {
-    // Hide all steps
     const steps = document.querySelectorAll('.step');
     steps.forEach(step => step.classList.remove('active'));
     
-    // Show the target step
-    document.getElementById(`step-${stepNumber}`).classList.add('active');
+    const targetStep = document.getElementById(`step-${stepNumber}`);
+    if (targetStep) {
+        targetStep.classList.add('active');
+    }
     
-    // Update step indicators
     const indicators = document.querySelectorAll('.step-dot');
     indicators.forEach(dot => {
         const dotStep = parseInt(dot.dataset.step);
         dot.classList.remove('active', 'completed');
-        
         if (dotStep === stepNumber) {
             dot.classList.add('active');
         } else if (dotStep < stepNumber) {
             dot.classList.add('completed');
         }
     });
-    
     setupState.currentStep = stepNumber;
 }
 
-// Go to next step
 function nextStep() {
     if (setupState.currentStep < setupState.totalSteps) {
         goToStep(setupState.currentStep + 1);
     }
 }
 
-// Go to previous step
 function prevStep() {
     if (setupState.currentStep > 1) {
         goToStep(setupState.currentStep - 1);
     }
 }
 
-// Add a source URL to the list - remove auto type default
-function addSource(url, urlType = 'auto') {
-    if (!url || !url.trim()) {
-        return false;
-    }
-    
+function addSource(url, urlType = 'regular') {
+    if (!url || !url.trim()) return false;
     url = url.trim();
+    if (setupState.sources.some(source => source.url === url)) return false;
     
-    // Check if already added
-    if (setupState.sources.some(source => source.url === url)) {
-        return false;
-    }
-    
-    // Add to state with URL type
-    setupState.sources.push({
-        url: url,
-        url_type: urlType
-    });
-    
-    // Update UI
+    setupState.sources.push({ url: url, url_type: urlType });
     updateSourcesList();
     return true;
 }
 
-// Remove a source URL from the list
 function removeSource(url) {
     const index = setupState.sources.findIndex(source => source.url === url);
     if (index !== -1) {
@@ -98,23 +75,22 @@ function removeSource(url) {
     }
 }
 
-// Update the sources list in the UI
 function updateSourcesList() {
     const sourcesList = document.getElementById('sourcesList');
     const noSourcesMessage = document.getElementById('noSourcesMessage');
     
+    if (!sourcesList) return;
+
     if (setupState.sources.length === 0) {
-        noSourcesMessage.style.display = 'block';
-        sourcesList.innerHTML = '';
-        sourcesList.appendChild(noSourcesMessage);
+        if (noSourcesMessage) {
+            noSourcesMessage.style.display = 'block';
+            sourcesList.innerHTML = '';
+            sourcesList.appendChild(noSourcesMessage);
+        }
     } else {
-        noSourcesMessage.style.display = 'none';
+        if (noSourcesMessage) noSourcesMessage.style.display = 'none';
+        document.querySelectorAll('#sourcesList .source-item').forEach(item => item.remove());
         
-        // Clear existing items except the no sources message
-        const existingItems = document.querySelectorAll('#sourcesList .source-item');
-        existingItems.forEach(item => item.remove());
-        
-        // Add current sources
         setupState.sources.forEach(source => {
             const item = document.createElement('div');
             item.className = 'list-group-item source-item d-flex justify-content-between align-items-center';
@@ -122,88 +98,72 @@ function updateSourcesList() {
                 <span class="text-break">${source.url}</span>
                 <span class="badge bg-info me-2">${source.url_type === 'zeronet' ? 'ZeroNet' : 'HTTP'}</span>
                 <button class="btn btn-sm btn-outline-danger remove-source-btn" data-url="${source.url}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
-                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                    </svg>
+                    <i class="bi bi-trash"></i>
                 </button>
             `;
             sourcesList.appendChild(item);
-            
-            // Add event listener to the remove button
-            item.querySelector('.remove-source-btn').addEventListener('click', function() {
-                removeSource(this.dataset.url);
-            });
+            const removeBtn = item.querySelector('.remove-source-btn');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', function() {
+                    removeSource(this.dataset.url);
+                });
+            }
         });
     }
 }
 
-// Save final configuration and complete setup
 async function saveConfiguration() {
     showLoading();
     try {
-        // Save base URL
-        await fetch('/api/config/base_url', {
+        if (setupState.adminUser.username && setupState.adminUser.password) {
+            const userResponse = await fetch('/api/users/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    username: setupState.adminUser.username,
+                    password: setupState.adminUser.password,
+					is_admin: true
+                })
+            });
+
+            if (!userResponse.ok) {
+                throw new Error('Failed to create admin user account');
+            }
+        }
+
+        await fetch('/api/config/stream_mode', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ base_url: setupState.baseUrl })
+            body: JSON.stringify({ stream_mode: setupState.streamMode })
         });
         
-        // Save addpid setting
-        await fetch('/api/config/addpid', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ addpid: setupState.addpid })
-        });
-        
-        // Save Ace Engine URL
-        await fetch('/api/config/ace_engine_url', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ace_engine_url: setupState.aceEngineUrl })
-        });
-        
-        // Save rescrape interval
         await fetch('/api/config/rescrape_interval', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ hours: setupState.rescrapeInterval })
         });
         
-		// Save check status interval and checkbox status
         await fetch('/api/config/checkstatus_interval', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                hours: setupState.checkstatus_interval, 
-                enabled: setupState.checkstatus_enabled 
-            })
+            body: JSON.stringify({ hours: setupState.checkstatus_interval, enabled: setupState.checkstatus_enabled })
         });
-		
-        // Mark setup as completed - IMPORTANT: This should be last
+        
         const setupResponse = await fetch('/api/config/setup_completed', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ completed: true })
         });
 
-        if (!setupResponse.ok) {
-            throw new Error('Failed to mark setup as completed');
-        }
+        if (!setupResponse.ok) throw new Error('Failed to mark setup as completed');
         
-        // Add source URLs only after setup is completed
         for (const source of setupState.sources) {
-            const response = await fetch('/api/urls/', {
+            await fetch('/api/urls/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: source.url, url_type: source.url_type })
             });
-            
-            if (!response.ok) {
-                console.error(`Failed to add URL: ${source.url}`);
-            }
         }
-        
         return true;
     } catch (error) {
         console.error('Error saving configuration:', error);
@@ -214,149 +174,128 @@ async function saveConfiguration() {
     }
 }
 
-// Finish setup and redirect to dashboard
 async function finishSetup() {
     try {
         showLoading();
         const success = await saveConfiguration();
-        if (success) {
-            // Force reload to trigger server-side redirect
-            window.location.href = '/';
-        }
+        if (success) window.location.href = '/';
     } catch (error) {
         console.error('Error finishing setup:', error);
-        alert('There was an error completing the setup. Please try again.');
+        alert('There was an error completing the setup.');
     } finally {
         hideLoading();
     }
 }
 
-// Initialize the setup page
 document.addEventListener('DOMContentLoaded', function() {    
-    // Enable clicking on step indicators
     document.querySelectorAll('.step-dot').forEach(dot => {
         dot.addEventListener('click', () => {
             const stepNumber = parseInt(dot.dataset.step);
-            if (stepNumber <= setupState.currentStep) {
-                goToStep(stepNumber);
-            }
+            if (stepNumber <= setupState.currentStep) goToStep(stepNumber);
         });
     });
-    
-    // Base URL form submission
-    document.getElementById('baseUrlForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        setupState.baseUrl = document.getElementById('baseUrl').value;
-        setupState.addpid = document.getElementById('addPidCheckbox').checked;
-        nextStep();
-    });
-    
-    // Ace Engine form submission
-    document.getElementById('aceEngineForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        setupState.aceEngineUrl = document.getElementById('aceEngineUrl').value;        
-        nextStep();
-    });
-    
-    // Add source button click
-    document.getElementById('addSourceBtn').addEventListener('click', function() {
-        const sourceUrl = document.getElementById('sourceUrl').value;
-        const sourceUrlType = document.getElementById('sourceUrlType').value;
-        
-        if (addSource(sourceUrl, sourceUrlType)) {
-            document.getElementById('sourceUrl').value = '';
-        } else {
-            alert('Please enter a valid URL that has not been added yet.');
-        }
-    });
-    
-    // Scraping sources form submission
-    document.getElementById('scrapingSourcesForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        // Add any URL that might be in the input but not added yet
-        const sourceUrl = document.getElementById('sourceUrl').value;
-        if (sourceUrl) {
-            addSource(sourceUrl);
-        }
-        
-        // Check if at least one source is added
-        if (setupState.sources.length === 0) {
-            alert('Please add at least one source URL to scrape.');
-            return;
-        }
-        
-        // Save rescrape interval
-        setupState.rescrapeInterval = parseInt(document.getElementById('rescrapeInterval').value) || 24;
-        
-        nextStep();
-    });
-	
-	// Manejador para el nuevo Paso 5: Channel Status
-	const channelCheckForm = document.getElementById('channelCheckForm');
-	if (channelCheckForm) {
-		channelCheckForm.addEventListener('submit', function(e) {
-			e.preventDefault();
-			setupState.checkstatus_enabled = document.getElementById('enableCheck').checked;
-			setupState.checkstatus_interval = parseInt(document.getElementById('checkInterval').value) || 24;
-			nextStep();
-		});
-	}
 
-	// Lógica para deshabilitar el input si el switch está apagado
-	const enableCheck = document.getElementById('enableCheck');
-	if (enableCheck) {
-		enableCheck.addEventListener('change', function() {
-			document.getElementById('checkInterval').disabled = !this.checked;
-		});
-	}
+    // Paso 2: Gestión de cuenta de administrador
+    const adminAccountForm = document.getElementById('adminAccountForm');
+    if (adminAccountForm) {
+        adminAccountForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const usernameInput = document.getElementById('adminUsername');
+            const passwordInput = document.getElementById('adminPassword');
+            const passwordConfirmInput = document.getElementById('adminPasswordConfirm');
+
+            const username = usernameInput ? usernameInput.value.trim() : '';
+            const password = passwordInput ? passwordInput.value : '';
+            const passwordConfirm = passwordConfirmInput ? passwordConfirmInput.value : '';
+
+            if (!username || !password) {
+                alert('Please enter username and password.');
+                return;
+            }
+
+            if (password !== passwordConfirm) {
+                alert('Passwords do not match.');
+                return;
+            }
+
+            setupState.adminUser.username = username;
+            setupState.adminUser.password = password;
+            nextStep(); // Avanza correctamente al paso 3
+        });
+    }
     
-    // Set default values based on common configurations
-    document.getElementById('baseUrl').value = 'acestream://';
-    document.getElementById('aceEngineUrl').value = 'http://localhost:6878'; // Default for Acexy
-    document.getElementById('addPidCheckbox').checked = false; // Default for addpid
+    // Paso 3: Modo de streaming
+    const streamModeForm = document.getElementById('streamModeForm');
+    if (streamModeForm) {
+        streamModeForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const streamModeSelect = document.getElementById('streamModeSelect');
+            if (streamModeSelect) {
+                setupState.streamMode = streamModeSelect.value;
+            }
+            nextStep();
+        });
+    }
     
-    // Initialize sources list
+    // Paso 4: Fuentes de scraping
+    const addSourceBtn = document.getElementById('addSourceBtn');
+    if (addSourceBtn) {
+        addSourceBtn.addEventListener('click', function() {
+            const sourceUrlInput = document.getElementById('sourceUrl');
+            const sourceUrlTypeSelect = document.getElementById('sourceUrlType');
+            
+            const sourceUrl = sourceUrlInput ? sourceUrlInput.value : '';
+            const sourceUrlType = sourceUrlTypeSelect ? sourceUrlTypeSelect.value : 'regular';
+            
+            if (addSource(sourceUrl, sourceUrlType)) {
+                if (sourceUrlInput) sourceUrlInput.value = '';
+            } else {
+                alert('Please enter a valid URL.');
+            }
+        });
+    }
+    
+    const scrapingSourcesForm = document.getElementById('scrapingSourcesForm');
+    if (scrapingSourcesForm) {
+        scrapingSourcesForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const sourceUrlInput = document.getElementById('sourceUrl');
+            const sourceUrl = sourceUrlInput ? sourceUrlInput.value : '';
+            if (sourceUrl) addSource(sourceUrl);
+            
+            if (setupState.sources.length === 0) {
+                alert('Please add at least one source URL.');
+                return;
+            }
+            const rescrapeIntervalInput = document.getElementById('rescrapeInterval');
+            setupState.rescrapeInterval = rescrapeIntervalInput ? (parseInt(rescrapeIntervalInput.value) || 24) : 24;
+            nextStep();
+        });
+    }
+    
+    // Paso 5: Estado de canales
+    const channelCheckForm = document.getElementById('channelCheckForm');
+    if (channelCheckForm) {
+        channelCheckForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const enableCheckInput = document.getElementById('enableCheck');
+            const checkIntervalInput = document.getElementById('checkInterval');
+
+            setupState.checkstatus_enabled = enableCheckInput ? enableCheckInput.checked : true;
+            setupState.checkstatus_interval = checkIntervalInput ? (parseInt(checkIntervalInput.value) || 24) : 24;
+            nextStep();
+        });
+    }
+
+    const enableCheck = document.getElementById('enableCheck');
+    if (enableCheck) {
+        enableCheck.addEventListener('change', function() {
+            const checkIntervalInput = document.getElementById('checkInterval');
+            if (checkIntervalInput) {
+                checkIntervalInput.disabled = !this.checked;
+            }
+        });
+    }
+    
     updateSourcesList();
-    
-    // Focus first input on page load
-    document.getElementById('baseUrl').focus();
 });
-
-// Validate setup data
-function validateSetup() {
-    const baseUrl = document.getElementById('baseUrl').value;
-    const aceEngineUrl = document.getElementById('aceEngineUrl').value;
-    const rescrapeInterval = document.getElementById('rescrapeInterval').value;
-    
-    if (!baseUrl || !aceEngineUrl || !rescrapeInterval) {
-        showAlert('error', 'Please fill in all required fields');
-        return false;
-    }
-    
-    // URLs are optional, just collect them if they exist
-    const urlsInput = document.getElementById('urlsInput');
-    if (urlsInput && urlsInput.value.trim()) {
-        setupState.sources = urlsInput.value
-            .split('\n')
-            .map(url => url.trim())
-            .filter(url => url.length > 0);
-    }
-	
-	// 3. NUEVO: Captura de los datos de Check Status (Paso 5)
-    const enableCheckEl = document.getElementById('enableCheck');
-    const checkIntervalEl = document.getElementById('checkInterval');
-
-    if (enableCheckEl) {
-        // Se guarda true si está marcado, false si no
-        setupState.checkstatus_enabled = enableCheckEl.checked;
-        
-        // Si está habilitado, cogemos el valor del input. 
-        // Si está deshabilitado, enviamos un valor por defecto (ej. 24) o el que ya hubiera.
-        if (checkIntervalEl) {
-            setupState.checkstatus_interval = parseInt(checkIntervalEl.value) || 24;
-        }
-	}
-    
-    return true;
-}

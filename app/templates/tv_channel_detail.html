@@ -2,206 +2,133 @@
 
 {% block title %}TV Channel Detail - Acestream Scraper{% endblock %}
 
+{% block tv_channels_active %}active{% endblock %}
+
 {% block content %}
-<div class="container py-4" id="tvChannelDetailContainer">
-    
-    <!-- Channel Header -->
-    <div class="row mb-4 align-items-center" id="channelHeader">
-        <div class="col-auto" id="channelLogoContainer">
-            <div class="placeholder-logo bg-light rounded d-flex align-items-center justify-content-center" style="width: 150px; height: 150px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-tv text-muted" viewBox="0 0 16 16">
-                    <path d="M2.5 13.5A.5.5 0 0 1 3 13h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zM13.991 3l.024.001a1.46 1.46 0 0 1 .538.143.757.757 0 0 1 .302.254c.067.1.145.277.145.602v5.991l-.001.024a1.464 1.464 0 0 1-.143.538.758.758 0 0 1-.254.302c-.1.067-.277.145-.602.145H2.009l-.024-.001a1.464 1.464 0 0 1-.538-.143.758.758 0 0 1-.302-.254C1.078 10.502 1 10.325 1 10V4.009l.001-.024a1.46 1.46 0 0 1 .143-.538.758.758 0 0 1 .254-.302C1.498 3.078 1.675 3 2 3h11.991zM14 2H2C0 2 0 4 0 4v6c0 2 2 2 2 2h12c2 0 2-2 2-2V4c0-2-2-2-2-2z"/>
-                </svg>
-            </div>
-        </div>
-        <div class="col">
-            <div class="d-flex align-items-center">
-                <h1 id="channelName">Loading...</h1>
-                <!-- Add favorite button/star -->
-                <button class="btn btn-link text-decoration-none ms-2" id="toggleFavoriteBtn">
-                    <i class="bi bi-star fs-4" id="favoriteIcon"></i>
-                </button>
-                <!-- Add channel number badge -->
-                <span class="badge bg-secondary ms-2" id="channelNumberBadge"></span>
-            </div>
-            <div id="channelMetadata" class="mb-2">
-                <span class="badge bg-secondary me-2" id="channelCategory"></span>
-                <span class="badge bg-info me-2" id="channelCountry"></span>
-                <span class="badge bg-primary" id="channelLanguage"></span>
-            </div>
-            <p id="channelDescription" class="text-muted">Loading channel information...</p>
-        </div>
-        <div class="col-auto">
-            <div class="btn-group">
-                <button class="btn btn-primary" id="editChannelBtn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil me-1" viewBox="0 0 16 16">
-                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
-                    </svg>
-                    Edit
-                </button>
-                <button class="btn btn-danger" id="deleteChannelBtn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash me-1" viewBox="0 0 16 16">
-                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                    </svg>
-                    Delete
-                </button>
-            </div>
-        </div>
+<!-- Botón Volver y Cabecera -->
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <a href="{{ url_for('main.tv_channels') }}" class="btn btn-outline-secondary rounded-pill px-3">
+        <i class="bi bi-arrow-left me-1"></i> Back to TV Channels
+    </a>
+    {% if is_admin %}
+    <div>
+        <button id="editChannelBtn" class="btn btn-outline-primary rounded-pill px-3 me-2" onclick="editChannel()">
+            <i class="bi bi-pencil me-1"></i> Edit Channel
+        </button>
+        <button id="assignAcestreamsBtn" class="btn btn-primary rounded-pill px-3" onclick="showAssignModal()">
+            <i class="bi bi-link-45deg me-1"></i> Manage Streams
+        </button>
     </div>
-    
-    <!-- Channel Detail Tabs -->
-    <div class="card">
-        <div class="card-body">
-            <ul class="nav nav-tabs" id="channelTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="acestreams-tab" data-bs-toggle="tab" data-bs-target="#acestreams" type="button" role="tab" aria-controls="acestreams" aria-selected="true">Acestream Channels</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="epg-tab" data-bs-toggle="tab" data-bs-target="#epg" type="button" role="tab" aria-controls="epg" aria-selected="false">EPG Information</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="details-tab" data-bs-toggle="tab" data-bs-target="#details" type="button" role="tab" aria-controls="details" aria-selected="false">Channel Details</button>
-                </li>
-            </ul>
-            <div class="tab-content p-3" id="channelTabContent">
-                <!-- Acestream Channels Tab -->
-                <div class="tab-pane fade show active" id="acestreams" role="tabpanel" aria-labelledby="acestreams-tab">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5>Associated Acestream Channels</h5>
-                        <div>
-                            <button class="btn btn-primary btn-sm" id="assignAcestreamsBtn">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-link me-1" viewBox="0 0 16 16">
-                                    <path d="M6.354 5.5H4a3 3 0 0 0 0 6h3a3 3 0 0 0 2.83-4H9c-.086 0-.17.01-.25.031A2 2 0 0 1 7 10.5H4a2 2 0 1 1 0-4h1.535c.218-.376.495-.714.82-1z"/>
-                                    <path d="M9 5.5a3 3 0 0 0-2.83 4h1.098A2 2 0 0 1 9 6.5h3a2 2 0 1 1 0 4h-1.535a4.02 4.02 0 0 1-.82 1H12a3 3 0 1 0 0-6H9z"/>
-                                </svg>
-                                Assign Acestreams
-                            </button>
-                        </div>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>ID</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="acestreamsTableBody">
-                                <tr>
-                                    <td colspan="4" class="text-center">
-                                        <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                            <span class="visually-hidden">Loading acestreams...</span>
-                                        </div>
-                                        <span class="ms-2">Loading acestreams...</span>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="text-center text-muted" id="noAcestreamsMessage" style="display: none;">
-                        <p>No acestream channels associated with this TV channel.</p>
-                        <button class="btn btn-outline-primary" id="findAcestreamsBtn">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-search me-1" viewBox="0 0 16 16">
-                                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
-                            </svg>
-                            Find Acestreams to Associate
+    {% endif %}
+</div>
+
+<!-- Tarjeta de Información Principal del Canal -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <!-- Elementos requeridos por tv-channel-detail.js -->
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="d-flex align-items-center gap-3">
+                <div id="channelLogoContainer"></div>
+                <div>
+                    <h3 id="channelName" class="fw-bold mb-1">Loading...</h3>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span id="channelNumberBadge" class="badge bg-secondary d-none"></span>
+                        <span id="isFavoriteDisplay"><span class="badge bg-secondary">Not favorite</span></span>
+                        <button id="toggleFavoriteBtn" class="btn btn-link text-warning p-0 ms-2" title="Toggle favorite">
+                            <i id="favoriteIcon" class="bi bi-star fs-4"></i>
                         </button>
                     </div>
                 </div>
-                
-                <!-- EPG Information Tab -->
-                <div class="tab-pane fade" id="epg" role="tabpanel" aria-labelledby="epg-tab">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="card mb-3">
-                                <div class="card-header">EPG Data</div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label class="form-label">EPG ID</label>
-                                        <div class="input-group">
-                                            <input type="text" class="form-control" id="epgIdDisplay" readonly>
-                                            <button class="btn btn-outline-secondary" id="syncEpgBtn" title="Synchronize EPG data">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-repeat" viewBox="0 0 16 16">
-                                                    <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                                                    <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">EPG Source</label>
-                                        <input type="text" class="form-control" id="epgSourceDisplay" readonly>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">Current/Next Program</div>
-                                <div class="card-body" id="currentProgramContainer">
-                                    <p class="text-muted text-center">No program information available</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            </div>
+            {% if is_admin %}
+            <div class="d-flex gap-2">
+                <button id="syncEpgBtn" class="btn btn-outline-secondary btn-sm" title="Sync EPG">
+                    <i class="bi bi-arrow-repeat"></i> Sync EPG
+                </button>
+                <button id="deleteChannelBtn" class="btn btn-outline-danger btn-sm" title="Delete Channel">
+                    <i class="bi bi-trash"></i> Delete
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="row g-3 text-muted small border-top pt-3">
+            <div class="col-md-3"><strong>Category:</strong> <span id="channelCategory">-</span></div>
+            <div class="col-md-3"><strong>Country:</strong> <span id="channelCountry">-</span></div>
+            <div class="col-md-3"><strong>Language:</strong> <span id="channelLanguage">-</span></div>
+            <div class="col-md-3"><strong>Website:</strong> <span id="detailWebsite">-</span></div>
+        </div>
+        
+        <div class="mt-3">
+            <p id="channelDescription" class="text-muted mb-0">Loading description...</p>
+        </div>
+
+        <!-- Campos ocultos de soporte lógico estrictamente requeridos por tv-channel-detail.js -->
+        <div class="d-none">
+            <input type="text" id="epgIdDisplay">
+            <input type="text" id="epgSourceDisplay">
+            <span id="detailChannelId"></span>
+            <span id="detailCreatedAt"></span>
+            <span id="detailUpdatedAt"></span>
+            <span id="detailStatus"></span>
+            <!-- IDs que el JS busca obligatoriamente para evitar el error 'null' -->
+            <span id="detailTotalStreams">0</span>
+            <span id="detailOnlineStreams">0</span>
+            <input type="text" id="channelNumberInput">
+            <button id="setChannelNumberBtn"></button>
+            <button id="updateTVChannelBtn"></button>
+            <button id="previewLogoBtn"></button>
+            <button id="findAcestreamsBtn"></button>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Tabla de Acestreams Asignados -->
+    <div class="col-12 col-xl-8">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
+                <h5 class="card-title fw-bold mb-0 text-primary d-flex align-items-center gap-2">
+                    <i class="bi bi-broadcast"></i> Assigned Acestreams
+                </h5>
+                <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2" id="assignedStreamsCount">0 streams</span>
+            </div>
+            <div class="card-body px-4 py-3">
+                <div id="noAcestreamsMessage" class="alert alert-warning mb-3" style="display: none;">No acestream channels associated with this TV channel.</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="border-0 rounded-start">Stream Name</th>
+                                <th class="border-0">Content ID</th>
+                                <th class="border-0 text-center">Status</th>
+                                <th class="border-0 text-end pe-3 rounded-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="acestreamsTableBody">
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">Loading assigned streams...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                
-                <!-- Channel Details Tab -->
-                <div class="tab-pane fade" id="details" role="tabpanel" aria-labelledby="details-tab">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">Channel Information</div>
-                                <div class="card-body">
-                                    <dl class="row">
-                                        <dt class="col-sm-4">Channel ID</dt>
-                                        <dd class="col-sm-8" id="detailChannelId">-</dd>
-                                        
-                                        <!-- Add Channel Number -->
-                                        <dt class="col-sm-4">Channel Number</dt>
-                                        <dd class="col-sm-8">
-                                            <div class="input-group input-group-sm">
-                                                <input type="number" class="form-control" id="channelNumberInput" min="1">
-                                                <button class="btn btn-outline-primary" type="button" id="setChannelNumberBtn">Set</button>
-                                            </div>
-                                        </dd>
-                                        
-                                        <!-- Add Favorite Status -->
-                                        <dt class="col-sm-4">Favorite</dt>
-                                        <dd class="col-sm-8" id="isFavoriteDisplay">-</dd>
-                                        
-                                        <dt class="col-sm-4">Created</dt>
-                                        <dd class="col-sm-8" id="detailCreatedAt">-</dd>
-                                        
-                                        <dt class="col-sm-4">Last Updated</dt>
-                                        <dd class="col-sm-8" id="detailUpdatedAt">-</dd>
-                                        
-                                        <dt class="col-sm-4">Status</dt>
-                                        <dd class="col-sm-8" id="detailStatus">-</dd>
-                                        
-                                        <dt class="col-sm-4">Website</dt>
-                                        <dd class="col-sm-8" id="detailWebsite">-</dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">Stream Information</div>
-                                <div class="card-body">
-                                    <dl class="row">
-                                        <dt class="col-sm-6">Total Associated Acestreams</dt>
-                                        <dd class="col-sm-6" id="detailTotalStreams">-</dd>
-                                        
-                                        <dt class="col-sm-6">Online Streams</dt>
-                                        <dd class="col-sm-6" id="detailOnlineStreams">-</dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Guía EPG y Próximos Programas -->
+    <div class="col-12 col-xl-4">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-header bg-transparent border-0 pt-4 px-4 pb-0">
+                <h5 class="card-title fw-bold mb-0 text-primary d-flex align-items-center gap-2">
+                    <i class="bi bi-calendar-event"></i> EPG Schedule
+                </h5>
+            </div>
+            <div class="card-body px-4 py-3">
+                <div id="currentProgramContainer">
+                    <div class="text-center py-4 text-muted">
+                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                        Loading schedule...
                     </div>
                 </div>
             </div>
@@ -209,10 +136,16 @@
     </div>
 </div>
 
-<!-- Include edit modal -->
-{% include 'partials/modals/edit_tv_channel.html' %}
-{% include 'partials/modals/assign_acestreams.html' %}
+<!-- Modales de Edición y Asignación si es Administrador -->
+{% if is_admin %}
+    {% include "partials/modals/edit_tv_channel.html" ignore missing %}
+    {% include "partials/modals/assign_acestreams.html" ignore missing %}
+{% endif %}
+{% endblock %}
 
-<!-- Include script for TV Channel detail management -->
+{% block scripts %}
+<script>
+    const CURRENT_TV_CHANNEL_ID = {{ tv_channel_id }};
+</script>
 <script src="{{ url_for('static', filename='js/tv-channel-detail.js') }}"></script>
 {% endblock %}

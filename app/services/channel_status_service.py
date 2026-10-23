@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 class ChannelStatusService:
     def __init__(self):
         config = Config()
-        # Lee la URL configurada por el usuario en la BD
-        raw_url = config.base_url or "http://127.0.0.1:8080"
+        # Lee la URL configurada por el usuario en la BD (apuntando a Outpace)
+        raw_url = "http://127.0.0.1:6879"
 
-        # Extrae estrictamente 'esquema://host:puerto' descartando rutas como /ace/getstream?id=
+        # Extrae estrictamente 'esquema://host:puerto' descartando rutas
         parsed = urlparse(raw_url)
         netloc = parsed.netloc or parsed.path.split('/')[0]
         self.proxy_url = f"{parsed.scheme or 'http'}://{netloc}"
@@ -35,25 +35,6 @@ class ChannelStatusService:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    async def _is_channel_active_in_acexy(self, session: aiohttp.ClientSession, channel_id: str) -> bool:
-        """Consulta la API de Acexy para comprobar si el canal tiene un stream activo."""
-        try:
-            status_url = f"{self.proxy_url}/api/config/acexy_status"
-            async with session.get(status_url, timeout=aiohttp.ClientTimeout(total=2)) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    streams = data.get('streams_list', [])
-                    target_id = str(channel_id).lower().strip()
-                    
-                    return any(
-                        str(stream.get('id', '')).lower().strip() == target_id 
-                        for stream in streams
-                    )
-        except Exception as e:
-            logger.warning(f"Error querying acexy_status for {channel_id}: {e}")
-            
-        return False
-
     async def check_channel(self, channel_id: str) -> bool:
         from flask import current_app
         
@@ -65,42 +46,36 @@ class ChannelStatusService:
         error_msg = "Unknown error"
         check_time = datetime.now()
         
-        # 1. VERIFICACIÓN PREVIA: Si ya se está reproduciendo en Acexy
-        if await self._is_channel_active_in_acexy(session, channel_id):
-            logger.info(f"[SKIPPED/ONLINE] {channel_id} ya está activo en Acexy. Omitiendo prueba HTTP.")
-            is_online = True
-            error_msg = None
-        else:
-            # 2. PRUEBA HABITUAL: Solo si el canal no está en uso
-            stream_url = f"{self.proxy_url}/ace/getstream"
-            headers = {'Range': 'bytes=0-4095'}
-            
-            try:
-                async with session.get(
-                    stream_url, 
-                    params={'id': channel_id}, 
-                    headers=headers, 
-                    timeout=aiohttp.ClientTimeout(total=8),
-                    allow_redirects=False
-                ) as response:
-                    if response.status in (200, 206):
-                        content = await response.content.read(4096)
-                        if len(content) >= 1024:
-                            is_online = True
-                        else:
-                            error_msg = "Stream delivered insufficient or empty data"
-                    elif response.status in (301, 302, 303, 307, 308):
+        # Comprobación de estado mediante la ruta de compatibilidad de Outpace
+        stream_url = f"{self.proxy_url}/ace/getstream"
+        headers = {'Range': 'bytes=0-4095'}
+        
+        try:
+            async with session.get(
+                stream_url, 
+                params={'id': channel_id}, 
+                headers=headers, 
+                timeout=aiohttp.ClientTimeout(total=8),
+                allow_redirects=False
+            ) as response:
+                if response.status in (200, 206):
+                    content = await response.content.read(4096)
+                    if len(content) >= 1024:
                         is_online = True
                     else:
-                        error_msg = f"HTTP Error {response.status} from Acexy"
+                        error_msg = "Stream delivered insufficient or empty data"
+                elif response.status in (301, 302, 303, 307, 308):
+                    is_online = True
+                else:
+                    error_msg = f"HTTP Error {response.status} from Outpace"
 
-            except asyncio.TimeoutError:
-                error_msg = "Timeout waiting for Acexy buffer"
-            except Exception as e:
-                logger.error(f"Error checking {channel_id} via Acexy: {e}")
-                error_msg = str(e)
+        except asyncio.TimeoutError:
+            error_msg = "Timeout waiting for Outpace buffer"
+        except Exception as e:
+            logger.error(f"Error checking {channel_id} via Outpace: {e}")
+            error_msg = str(e)
 
-        # 3. ACTUALIZACIÓN EN BASE DE DATOS
+        # Actualización en base de datos
         try:
             with current_app.app_context():
                 db_channel = db.session.get(AcestreamChannel, channel_id)

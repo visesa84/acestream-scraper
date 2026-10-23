@@ -1,35 +1,22 @@
 #!/bin/bash
 set -e
 
-# Check Flask app
-response=$(curl -s http://localhost:$FLASK_PORT/health)
+# Puerto por defecto de Flask si la variable no está definida
+PORT=${FLASK_PORT:-5000}
+
+# Consultar el endpoint correcto de la API utilizando -f para fallar ante errores HTTP (4xx, 5xx)
+response=$(curl -s -f http://localhost:$PORT/api/health/)
 if [ $? -ne 0 ]; then
-    echo "Flask app healthcheck failed"
+    echo "Flask app healthcheck failed or endpoint unreachable"
     exit 1
 fi
 
-# Check if response indicates degraded status
+# Verificar si el estado devuelto por el JSON indica 'degraded'
 if echo "$response" | grep -q '"status":"degraded"'; then
     echo "System health is degraded"
     exit 1
 fi
 
-# Check Acexy (only if enabled)
-if [ "$ENABLE_ACEXY" = "true" ]; then
-    if [ "$ENABLE_ACESTREAM_ENGINE" = "false" ]; then
-        # Check external Acestream Engine
-        if ! curl -s -f "$ACEXY_HOST:$ACEXY_PORT" > /dev/null; then
-            echo "External Acestream Engine not accessible"
-            exit 1
-        fi
-    fi
-    
-    if ! curl -s -f http://localhost:8080/ace/status > /dev/null; then
-        echo "Acexy healthcheck failed"
-        exit 1
-    fi
-fi
-
-# All checks passed
+# Todas las comprobaciones pasaron con éxito
 echo "All health checks passed"
 exit 0

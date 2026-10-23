@@ -23,35 +23,27 @@ cron || true
 logrotate /etc/logrotate.d/acestream-services --debug || true
 
 # Preparamos las variables de control de procesos
-ACESTREAM_PID=""
-PYACEXY_PID=""
+OUTPACE_PID=""
+OUTPACE_CHECK_STREAM_PID=""
 ZERONET_PID=""
 GUNICORN_PID=""
+ACESTREAM_SEARCH_PID=""
 
 # TRAP POSICIONADO AL PRINCIPIO: Asegura una salida limpia de TODOS los servicios
 cleanup() {
     echo "Stopping all services cleanly..."
     # Matamos solo los PIDs que se hayan llegado a inicializar
-    kill -TERM $GUNICORN_PID $ZERONET_PID $PYACEXY_PID $ACESTREAM_PID 2>/dev/null || true
+    kill -TERM $GUNICORN_PID $ZERONET_PID $OUTPACE_PID $ACESTREAM_SEARCH_PID 2>/dev/null || true
     exit 0
 }
 trap cleanup INT TERM EXIT
+
+export ENABLE_WARP=${ENABLE_WARP:-false}
 
 # Initialize WARP if enabled
 if [ "${ENABLE_WARP}" = "true" ]; then
     echo "Initializing Cloudflare WARP..."
     /app/warp-setup.sh
-fi
-
-# Set ENABLE_ACESTREAM_ENGINE to match ENABLE_ACEXY if not explicitly set
-if [ -z "${ENABLE_ACESTREAM_ENGINE+x}" ]; then
-    export ENABLE_ACESTREAM_ENGINE=$ENABLE_ACEXY
-    echo "ENABLE_ACESTREAM_ENGINE not set, using ENABLE_ACEXY value: $ENABLE_ACESTREAM_ENGINE"
-fi
-# Update ACESTREAM_HTTP_HOST to use the actual value of ACEXY_HOST
-if [ "$ACESTREAM_HTTP_HOST" = "ACEXY_HOST" ]; then
-    export ACESTREAM_HTTP_HOST="$ACEXY_HOST"
-    echo "Setting ACESTREAM_HTTP_HOST to $ACEXY_HOST"
 fi
 
 # Setup ZeroNet config if not exists
@@ -80,42 +72,55 @@ if [ "$ENABLE_TOR" = "true" ]; then
     echo "Tor service logs available at $LOG_DIR/tor.log"
 fi
 
-# Start Acestream Engine(s) if enabled
-if [ "$ENABLE_ACESTREAM_ENGINE" = "true" ]; then
-    # Sanitize EXTRA_FLAGS and ensure buffer size
-    export EXTRA_FLAGS=$(echo ${EXTRA_FLAGS:-} | sed 's/"//g')
-    export ACEXY_BUFFER_SIZE=${ACEXY_BUFFER_SIZE:-10}
-    # Use ACESTREAM_HTTP_PORT from env (set in Dockerfile, default: 6878)
-    export ACESTREAM_HTTP_PORT=${ACESTREAM_HTTP_PORT:-6878}
+# --- Start Outpace ---
+echo "Starting Outpace engine with experimental AceStream compatibility enabled..."
+export OUTPACE_BIND=0.0.0.0:6878
+export OUTPACE_RTMP_BIND=0.0.0.0:1935
+export OUTPACE_PEER_LISTEN=0.0.0.0:8621
+export OUTPACE_DATA_DIR=/root/.local/share/outpace
+export OUTPACE_EXPERIMENTAL_ACE_COMPAT=1
+export OUTPACE_MAX_ACTIVE_UPSTREAMS=6
+export OUTPACE_MAX_PARALLEL_CONNECT=16
+export OUTPACE_REQUEST_TIMEOUT_MS=3500
+export OUTPACE_CONNECT_TIMEOUT_MS=5000
+export OUTPACE_READ_TIMEOUT_MS=10000
+export OUTPACE_CACHE_SIZE_MB=128
+export OUTPACE_MAX_CONNECTIONS_PER_STREAM=35
 
-	/opt/acestream/start-engine --client-console --http-port $ACESTREAM_HTTP_PORT $EXTRA_FLAGS --live-buffer $ACEXY_BUFFER_SIZE >> "$LOG_DIR/acestream.log" 2>&1 & 
-	ACESTREAM_PID=$!	
+outpace serve >> "$LOG_DIR/outpace.log" 2>&1 &
+OUTPACE_PID=$!
 
-    sleep 3
-    echo "Acestream engine startup log: $LOG_DIR/acestream.log"
-fi
+sleep 3
+echo "Outpace check stream engine startup log: $LOG_DIR/outpace_check_stream.log"
 
-# If Acestream Engine is disabled, background engine on :6879 won't exist —
-# force stream status checks off so the app doesn't waste time on failed checks.
-if [ "$ENABLE_ACESTREAM_ENGINE" = "false" ]; then
-    export CHECKSTATUS_ENABLED=false
-    echo "ENABLE_ACESTREAM_ENGINE is disabled; stream status checks disabled (CHECKSTATUS_ENABLED=false)."
-fi
+# --- Start Outpace Check Stream Engine ---
+echo "Starting Outpace check stream engine..."
+export OUTPACE_BIND=0.0.0.0:6879
+unset OUTPACE_RTMP_BIND
+export OUTPACE_PEER_LISTEN=0.0.0.0:8622
+export OUTPACE_DATA_DIR=/root/.local/share/outpace_check
+export OUTPACE_EXPERIMENTAL_ACE_COMPAT=1
+export OUTPACE_MAX_ACTIVE_UPSTREAMS=4
+export OUTPACE_MAX_PARALLEL_CONNECT=8
+export OUTPACE_REQUEST_TIMEOUT_MS=3500
+export OUTPACE_CONNECT_TIMEOUT_MS=5000
+export OUTPACE_READ_TIMEOUT_MS=10000
+export OUTPACE_CACHE_SIZE_MB=32
 
-# Start PyAcexy if enabled
-if [ "$ENABLE_ACEXY" = "true" ]; then
-    if [ "$ENABLE_ACESTREAM_ENGINE" = "false" ] && [ "$ACEXY_HOST" = "localhost" ] && [ "$ACEXY_PORT" = "6878" ]; then
-        echo "WARNING: Acestream Engine is disabled and ACEXY_HOST is set to localhost:6878 — pyacexy will try to connect to localhost inside the container which may not be correct. Continuing startup."
-    fi
-    
-    echo "Starting PyAcexy proxy..."
-    export ACEXY_HOST
-    export ACEXY_PORT
-    python /usr/local/bin/pyacexy >> "$LOG_DIR/pyacexy.log" 2>&1 &
-	PYACEXY_PID=$!
-    echo "PyAcexy proxy logs available at $LOG_DIR/pyacexy.log"
-else
-    echo "PyAcexy is disabled."
+outpace serve >> "$LOG_DIR/outpace_check_stream.log" 2>&1 &
+OUTPACE_CHECK_STREAM_PID=$!
+
+sleep 3
+echo "Outpace engine startup log: $LOG_DIR/outpace.log"
+
+export ENABLE_ACESTREAM_SEARCH=${ENABLE_ACESTREAM_SEARCH:-false}
+
+if [ "$ENABLE_ACESTREAM_SEARCH" = "true" ]; then
+	/opt/acestream/start-engine --client-console --http-port 6880 --port 8625 >> "$LOG_DIR/acestream.log" 2>&1 & 
+	ACESTREAM_SEARCH_PID=$!	
+
+	sleep 3
+	echo "Acestream engine startup log: $LOG_DIR/acestream.log"
 fi
 
 # Start ZeroNet in the background

@@ -1,9 +1,12 @@
-{% extends "layout.html" %} {% block title %}TV Channels Management - Acestream
-Scraper{% endblock %} {% block tv_channels_active %}active{% endblock %} {%
-block content %}
+{% extends "layout.html" %} 
+{% block title %}TV Channels Management - Acestream Scraper{% endblock %} 
+{% block tv_channels_active %}active{% endblock %} 
+
+{% block content %}
 <div class="container py-4">
 
-  <!-- Statistics summary -->
+  <!-- Statistics summary (Solo visible para Admin) -->
+  {% if is_admin %}
   <div class="row mb-4">
     <div class="col-md-3">
       <div class="card h-100">
@@ -39,7 +42,7 @@ block content %}
     </div>
   </div>
 
-  <!-- Global favorites filter -->
+  <!-- Global favorites filter (Solo visible para Admin) -->
   <div class="card mb-4">
     <div class="card-body">
       <div class="form-check">
@@ -50,7 +53,9 @@ block content %}
       </div>
     </div>
   </div>
-  <!-- TV Channels Playlist Section -->
+  {% endif %}
+
+  <!-- TV Channels Playlist Section (VISIBLE PARA TODOS: Administradores y Usuarios Estándar) -->
   <div class="card mb-4">
     <div class="card-header">TV Channels Playlist</div>
     <div class="card-body">
@@ -62,7 +67,6 @@ block content %}
             <input type="text" class="form-control" id="tvChannelsPlaylistUrl" data-base-url="{{ request.url_root }}api/playlists/tv-channels/m3u" value="{{ request.url_root }}api/playlists/tv-channels/m3u" readonly>
             <button class="btn btn-outline-secondary" type="button" id="copyPlaylistUrlBtn" onclick="copyToClipboard('#tvChannelsPlaylistUrl')">Copy</button>
           </div>
-          <!-- Hidden checkbox for compatibility with existing JS -->
           <div class="d-none">
             <input class="form-check-input" type="checkbox" id="playlistFavoritesOnly" onchange="updatePlaylistUrl()">
           </div>
@@ -111,8 +115,7 @@ block content %}
             <input type="text" class="form-control border-primary" id="epgPlaylistUrl" data-base-url="{{ request.url_root }}api/playlists/m3u/epg" value="{{ request.url_root }}api/playlists/m3u/epg" readonly>
             <button class="btn btn-outline-primary" type="button" onclick="copyToClipboard('#epgPlaylistUrl')">Copy</button>
           </div>
-		  <!-- Hidden checkbox for compatibility with existing JS -->
-          <div class="d-none">
+		  <div class="d-none">
             <input class="form-check-input" type="checkbox" id="epgPlaylistFavoritesOnly" onchange="updateEpgPlaylistUrl()">
           </div>
           <div class="d-flex justify-content-end mt-2">
@@ -130,7 +133,6 @@ block content %}
             <input type="text" class="form-control" id="epgXmlUrl" data-base-url="{{ request.url_root }}api/playlists/epg.xml" value="{{ request.url_root }}api/playlists/epg.xml" readonly>
             <button class="btn btn-outline-secondary" type="button" id="copyEpgXmlBtn" onclick="copyToClipboard('#epgXmlUrl')">Copy</button>
           </div>
-          <!-- Hidden checkbox for compatibility with existing JS -->
           <div class="d-none">
             <input class="form-check-input" type="checkbox" id="epgFavoritesOnly" onchange="updateEpgXmlUrl()">
           </div>
@@ -145,20 +147,16 @@ block content %}
     </div>
   </div>
 
-  <!-- Actions Panel -->
+  <!-- Actions Panel (Solo visible para Admin) -->
+  {% if is_admin %}
   <div class="card mb-4">
     <div class="card-body">
-      <!-- Channel actions row -->
       <div class="row mb-3">
         <div class="col-md-12 text-md-end">
           <div class="btn-toolbar justify-content-md-end">
             <button type="button" class="btn btn-primary me-2" id="addTVChannelBtn">
               <i class="bi bi-plus-lg me-1"></i> Add TV Channel
             </button>
-            <!-- <button type="button" class="btn btn-outline-primary me-2" id="batchAssignBtn">
-              <i class="bi bi-link me-1"></i> Auto-assign Acestreams
-            </button> -->
-            
             <button type="button" class="btn btn-outline-primary me-2" id="bulkUpdateEPGBtn">
               <i class="bi bi-broadcast me-1"></i> Update EPG
             </button>
@@ -172,7 +170,6 @@ block content %}
         </div>
       </div>
       
-      <!-- Bulk edit toolbar - initially hidden -->
       <div class="row" id="bulkEditContainer">
         <div class="col-12">
           <div id="bulkEditToolbar" class="alert alert-info d-none">
@@ -199,52 +196,40 @@ block content %}
     </div>
   </div>
 
-  <!-- Search and filters -->
+  <!-- Search and filters (Solo visible para Admin) -->
   <div class="card mb-4">
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-4">
-          <label for="tvChannelSearchInput" class="form-label"
-            >Search Channels</label
-          >
-          <input
-            type="text"
-            class="form-control"
-            id="tvChannelSearchInput"
-            placeholder="Search by name, description..." />
+          <label for="tvChannelSearchInput" class="form-label">Search Channels</label>
+          <input type="text" class="form-control" id="tvChannelSearchInput" placeholder="Search by name, description..." />
         </div>
         <div class="col-md-2">
           <label for="categoryFilter" class="form-label">Category</label>
           <select class="form-select" id="categoryFilter">
             <option value="">All Categories</option>
-            <!-- Categories will be populated by JavaScript -->
           </select>
         </div>
         <div class="col-md-2">
           <label for="countryFilter" class="form-label">Country</label>
           <select class="form-select" id="countryFilter">
             <option value="">All Countries</option>
-            <!-- Countries will be populated by JavaScript -->
           </select>
         </div>
         <div class="col-md-2">
           <label for="languageFilter" class="form-label">Language</label>
           <select class="form-select" id="languageFilter">
             <option value="">All Languages</option>
-            <!-- Languages will be populated by JavaScript -->
           </select>
         </div>
         <div class="col-md-2">
-          <label for="channelsPerPage" class="form-label"
-            >Channels Per Page</label
-          >
+          <label for="channelsPerPage" class="form-label">Channels Per Page</label>
           <select class="form-select" id="channelsPerPage">
             <option value="20">20</option>
             <option value="50">50</option>
             <option value="100">100</option>
           </select>
         </div>
-        <!-- Hidden checkbox for compatibility with existing JS -->
         <div class="d-none">
           <input class="form-check-input" type="checkbox" id="favoritesOnlyFilter">
         </div>
@@ -252,7 +237,7 @@ block content %}
     </div>
   </div>
 
-  <!-- TV Channels list -->
+  <!-- TV Channels list (Solo visible para Admin) -->
   <div class="card">
     <div class="card-body">
       <h5 class="card-title">TV Channels List</h5>
@@ -262,11 +247,7 @@ block content %}
             <tr>
               <th>
                 <div class="form-check">
-                  <input
-                    class="form-check-input"
-                    type="checkbox"
-                    value=""
-                    id="selectAllChannels" />
+                  <input class="form-check-input" type="checkbox" value="" id="selectAllChannels" />
                 </div>
               </th>
               <th>Channel #</th>
@@ -286,22 +267,45 @@ block content %}
         </table>
       </div>
 
-      <!-- Pagination -->
       <nav aria-label="TV Channels pagination">
         <ul class="pagination justify-content-center" id="tvChannelsPagination">
-          <!-- Pagination will be populated by JavaScript -->
         </ul>
       </nav>
     </div>
   </div>
+  {% endif %}
 </div>
 
-<!-- Include modals -->
+<!-- Include modals (Solo se incluyen si es admin) -->
+{% if is_admin %}
 {% include 'partials/modals/add_tv_channel.html' %} 
 {% include 'partials/modals/edit_tv_channel.html' %} 
-{% include 'partials/modals/batch_assign.html' %} 
 {% include 'partials/modals/bulk_edit_tv_channels.html' %}
+{% endif %}
 
-<!-- Include script for TV Channels management -->
+<!-- ELEMENTOS DE SOPORTE OCULTOS Y FUNCIONES GLOBALES DE PARCHE -->
+<div class="d-none">
+  <button id="saveBatchAssignBtn" type="button"></button>
+  <button id="addPatternRowBtn" type="button"></button>
+</div>
+
+<script>
+  function processBatchAssignment() {
+      console.log("processBatchAssignment stub executed");
+  }
+  function addAssignmentPatternRow() {
+      console.log("addAssignmentPatternRow stub executed");
+  }
+
+  // Solución global para eliminar fondos oscuros (modal-backdrops) residuales al cerrar modales
+  document.addEventListener('hidden.bs.modal', function (event) {
+      document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+  });
+</script>
+
+<!-- Carga del script específico -->
 <script src="{{ url_for('static', filename='js/tv-channels.js') }}"></script>
 {% endblock %}

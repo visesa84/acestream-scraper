@@ -12,7 +12,7 @@ jobs:
       contents: write
     
     env:
-      IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-scraper-pyacexy
+      IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/acestream-scraper-Outpace
 
     steps:
       - name: Checkout del código

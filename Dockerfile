@@ -1,50 +1,105 @@
 # --- STAGE 0: Compilación de BoringTun Estable ---
-FROM rust:1.85-slim AS builder
+FROM rust:1.85-slim AS builder-boringtun
 RUN apt-get update && apt-get install -y pkg-config libssl-dev curl ca-certificates tar && \
     mkdir -p /src && \
     curl -sSL https://github.com/cloudflare/boringtun/archive/refs/heads/master.tar.gz | tar -xz --strip-components=1 -C /src
 
 WORKDIR /src
-
-# Forzamos las versiones compatibles de 'time' en el archivo de configuración del proyecto
 RUN sed -i 's/\[dependencies\]/\[dependencies\]\ntime = "=0.3.36"\ntime-core = "=0.1.2"/' boringtun-cli/Cargo.toml
-
 RUN cargo install --path boringtun-cli
 
-# --- STAGE 1: Base image con todas las dependencias ---
+# --- STAGE 1: Descarga de Outpace desde GitHub usando la misma lógica Python ---
+FROM python:3.10-slim AS builder-outpace
+RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip
+
+RUN echo "import platform" > /tmp/download.py && \
+    echo "import urllib.request" >> /tmp/download.py && \
+    echo "import json" >> /tmp/download.py && \
+    echo "import os" >> /tmp/download.py && \
+    echo "import tarfile" >> /tmp/download.py && \
+    echo "import zipfile" >> /tmp/download.py && \
+    echo "import shutil" >> /tmp/download.py && \
+    echo 'api_url = "https://api.github.com/repos/jamezrin/outpace/releases/latest"' >> /tmp/download.py && \
+    echo 'headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "Acestream-Scraper-Client"}' >> /tmp/download.py && \
+    echo 'req = urllib.request.Request(api_url, headers=headers)' >> /tmp/download.py && \
+    echo 'with urllib.request.urlopen(req) as response:' >> /tmp/download.py && \
+    echo '    release_data = json.loads(response.read().decode())' >> /tmp/download.py && \
+    echo 'assets = release_data.get("assets", [])' >> /tmp/download.py && \
+    echo 'system = platform.system().lower()' >> /tmp/download.py && \
+    echo 'machine = platform.machine().lower()' >> /tmp/download.py && \
+    echo 'if machine in ["x86_64", "amd64"]:' >> /tmp/download.py && \
+    echo '    arch_keywords = ["amd64", "x86_64", "x64"]' >> /tmp/download.py && \
+    echo 'elif machine in ["aarch64", "armv8"]:' >> /tmp/download.py && \
+    echo '    arch_keywords = ["arm64", "aarch64"]' >> /tmp/download.py && \
+    echo 'elif machine in ["arm", "hf"]:' >> /tmp/download.py && \
+    echo '    arch_keywords = ["armv7", "armhf", "arm"]' >> /tmp/download.py && \
+    echo 'else:' >> /tmp/download.py && \
+    echo '    arch_keywords = [machine]' >> /tmp/download.py && \
+    echo 'download_url = None' >> /tmp/download.py && \
+    echo 'for asset in assets:' >> /tmp/download.py && \
+    echo '    name = asset.get("name", "").lower()' >> /tmp/download.py && \
+    echo '    if (system in name or "linux" in name) and any(ak in name for ak in arch_keywords):' >> /tmp/download.py && \
+    echo '        download_url = asset.get("browser_download_url")' >> /tmp/download.py && \
+    echo '        break' >> /tmp/download.py && \
+    echo 'if not download_url and len(assets) == 1:' >> /tmp/download.py && \
+    echo '    download_url = assets[0].get("browser_download_url")' >> /tmp/download.py && \
+    echo 'print(f"Downloading Outpace asset from: {download_url}")' >> /tmp/download.py && \
+    echo 'urllib.request.urlretrieve(download_url, "/tmp/outpace_asset")' >> /tmp/download.py && \
+    echo 'target_path = "/usr/local/bin/outpace"' >> /tmp/download.py && \
+    echo 'if download_url.endswith((".tar.gz", ".tgz")):' >> /tmp/download.py && \
+    echo '    with tarfile.open("/tmp/outpace_asset", "r:gz") as tar:' >> /tmp/download.py && \
+    echo '        member = next((m for m in tar.getmembers() if "outpace" in m.name and m.isfile()), None)' >> /tmp/download.py && \
+    echo '        if not member:' >> /tmp/download.py && \
+    echo '            member = next(m for m in tar.getmembers() if m.isfile())' >> /tmp/download.py && \
+    echo '        extracted = tar.extractfile(member)' >> /tmp/download.py && \
+    echo '        with open(target_path, "wb") as f_out:' >> /tmp/download.py && \
+    echo '            f_out.write(extracted.read())' >> /tmp/download.py && \
+    echo 'elif download_url.endswith(".zip"):' >> /tmp/download.py && \
+    echo '    with zipfile.ZipFile("/tmp/outpace_asset", "r") as z:' >> /tmp/download.py && \
+    echo '        fname = next((n for n in z.namelist() if "outpace" in n and not n.endswith("/")), z.namelist()[0])' >> /tmp/download.py && \
+    echo '        with z.open(fname) as f_in, open(target_path, "wb") as f_out:' >> /tmp/download.py && \
+    echo '            f_out.write(f_in.read())' >> /tmp/download.py && \
+    echo 'else:' >> /tmp/download.py && \
+    echo '    shutil.move("/tmp/outpace_asset", target_path)' >> /tmp/download.py && \
+    echo 'os.chmod(target_path, 0o755)' >> /tmp/download.py
+
+RUN python3 /tmp/download.py && rm /tmp/download.py
+
+# --- STAGE 2: Imagen Base con Dependencias y Binarios ---
 FROM python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
-      description="Base image for Acestream channel scraper with pyacexy" \
-      version="5.0"
+      description="Acestream channel scraper with Outpace and ZeroNet support" \
+      version="6.0"
 
 WORKDIR /app
 RUN mkdir -p /app/config
 
-# Copiamos el binario de BoringTun desde la etapa anterior
-COPY --from=builder /usr/local/cargo/bin/boringtun-cli /usr/local/bin/boringtun
-RUN chmod +x /usr/local/bin/boringtun
+# Copiamos y configuramos el binario de BoringTun
+COPY --from=builder-boringtun /usr/local/cargo/bin/boringtun-cli /usr/local/bin/boringtun
+RUN chmod +x /usr/local/bin/boringtun && \
+    mv /usr/local/bin/boringtun /usr/local/bin/boringtun-real
 
-# Renombramos el binario real
-RUN mv /usr/local/bin/boringtun /usr/local/bin/boringtun-real
-
-# Creamos un script que haga de "puente" y fuerce las opciones
 RUN echo '#!/bin/bash\n/usr/local/bin/boringtun-real --disable-drop-privileges "$@"' > /usr/local/bin/boringtun && \
     chmod +x /usr/local/bin/boringtun
 
-# Instalar dependencias del sistema + herramientas de WireGuard
+# Copiamos el binario de Outpace descargado desde GitHub
+COPY --from=builder-outpace /usr/local/bin/outpace /usr/local/bin/outpace
+RUN chmod +x /usr/local/bin/outpace
+
+# Instalar dependencias del sistema necesarias (incluyendo ffmpeg para procesamiento de streams/HLS)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl gnupg gcc python3-dev build-essential \
     tor git lsb-release apt-transport-https ca-certificates \
     wireguard-tools iproute2 \
-	openresolv logrotate cron \
+    openresolv logrotate cron ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Configuración de TOR
 RUN echo "ControlPort 9051" >> /etc/tor/torrc && \
     echo "CookieAuthentication 1" >> /etc/tor/torrc
 
-# 1. Actualizar herramientas de construcción
+# Dependencias de Python esenciales
 RUN pip install --no-cache-dir \
     "msgpack-python" \
     "gevent==22.10.2" \
@@ -63,19 +118,7 @@ RUN pip install --no-cache-dir \
     "base58" \
     "defusedxml" \
     "rsa" \
-	"psutil"
-
-# --- INSTALACIÓN DE PYACEXY ---
-COPY pyacexy/ /opt/pyacexy/
-
-RUN cp /opt/pyacexy/proxy.py /usr/local/bin/pyacexy && \
-    cp /opt/pyacexy/aceid.py /usr/local/bin/aceid.py && \
-    cp /opt/pyacexy/copier.py /usr/local/bin/copier.py && \
-	cd /opt/pyacexy && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Permisos de ejecución
-RUN chmod +x /usr/local/bin/pyacexy /usr/local/bin/aceid.py /usr/local/bin/copier.py
+    "psutil"
 
 # Descargar e instalar ZeroNet
 RUN mkdir -p ZeroNet && \
@@ -92,9 +135,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
   && apt-get install --no-install-recommends -y \
       ca-certificates wget sudo \
-	  python3-gi \
-	  gir1.2-gtk-3.0 \
-	  ffmpeg \
+      python3-gi \
+      gir1.2-gtk-3.0 \
+      ffmpeg \
   && rm -rf /var/lib/apt/lists/* \
   #
   # Download acestream
@@ -107,45 +150,28 @@ RUN apt-get update \
   && bash ./install_dependencies.sh \
   && popd || exit
 
-# Instalar la librería
-RUN apt-get update && apt-get install -y libjemalloc2 && rm -rf /var/lib/apt/lists/*
-
-# Clean up APT in base image
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Set default environment variables for base image
+# Variables de entorno predeterminadas
 ENV DOCKER_ENV=true
 ENV TZ='Europe/Madrid'
 ENV ENABLE_TOR=false
-ENV ENABLE_ACEXY=true
-ENV ENABLE_ACESTREAM_ENGINE=true
-ENV CHECKSTATUS_ENABLED=true
 ENV WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
 ENV WG_THREADS=4
 ENV ENABLE_WARP=false
+ENV ENABLE_ACESTREAM_SEARCH=true
 ENV CONTAINER_NETWORK_MODE=host
 ENV WARP_LICENSE_KEY=
-ENV ACESTREAM_HTTP_PORT=6878
-ENV ACESTREAM_HTTP_HOST=ACEXY_HOST
 ENV FLASK_PORT=8040
-ENV ACEXY_LISTEN_ADDR=":8080"
-ENV ACEXY_HOST="localhost"
-ENV ACEXY_PORT=6878
-ENV ALLOW_REMOTE_ACCESS="no"
-ENV ACEXY_BUFFER_SIZE=10
-ENV LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
-ENV MALLOC_CONF="dirty_decay_ms:1000,muzzy_decay_ms:1000"
-ENV EXTRA_FLAGS="--cache-dir /tmp --cache-limit 2 --log-stderr --log-stderr-level error --max-connections 300 --max-peers 50 --core-dlrate-helper 0 --stats-report-interval 10 --live-cache-type memory --live-cache-size 209715200"
 
-# Final image with application code
+# --- STAGE 3: Imagen Final de la Aplicación ---
 FROM base
 
-# Update metadata labels for the final image
-LABEL description="Acestream channel scraper with ZeroNet support" \
-      version="5.0"
+LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
+      version="6.0"
 
-# Copy application files
+# Copiar archivos de la aplicación y scripts de control
 COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh
 COPY --chmod=0755 healthcheck.sh /app/healthcheck.sh
 COPY --chmod=0755 warp-setup.sh /app/warp-setup.sh
@@ -156,42 +182,31 @@ COPY migrations_app.py manage.py ./
 COPY wsgi.py ./
 COPY app/ ./app/
 
-# FORZAMOS PERMISOS DE EJECUCIÓN
 RUN chmod +x /app/entrypoint.sh /app/healthcheck.sh /app/warp-setup.sh /usr/local/bin/wgcf
 
-# Install the application dependencies
+# Instalar dependencias de Python del proyecto
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir -r requirements-prod.txt
 
-# Expose the ports
+# Exponer puertos de la app web, ZeroNet y Outpace
+EXPOSE 1935
 EXPOSE 8040
 EXPOSE 43110
 EXPOSE 43111
 EXPOSE 26552
-EXPOSE 8080
-EXPOSE 8621/tcp
-EXPOSE 8621/udp
 EXPOSE 6878
+EXPOSE 8621
+EXPOSE 8622
+EXPOSE 8625
 
-# Set the volume
 VOLUME ["/app/ZeroNet/data"]
 VOLUME ["/app/config"]
 VOLUME ["/app/config/recordings"]
 
-# Make sure WORKDIR is set correctly
 WORKDIR /app
-
-# FORZAMOS PERMISOS DE EJECUCIÓN
 RUN chmod -R 755 /app
 
-# Define the healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
     CMD /app/healthcheck.sh
-
-# IMPORTANT: The following capabilities must be added when running the container with WARP enabled:
-# --cap-add NET_ADMIN
-# --cap-add SYS_ADMIN
-# Example: docker run --cap-add NET_ADMIN --cap-add SYS_ADMIN -e ENABLE_WARP=true ...
-# Note: Container runs with IPv6 disabled to avoid DNS lookup issues
 
 ENTRYPOINT ["/app/entrypoint.sh"]

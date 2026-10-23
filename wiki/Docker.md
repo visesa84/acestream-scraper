@@ -1,136 +1,51 @@
 # Docker Guide
 
-## What is Docker?
+Docker is the recommended deployment because the image bundles the Python application and supporting services (Outpace, ZeroNet, FFmpeg, and the optional search engine).
 
-Docker is a platform that uses containerization technology to package applications and their dependencies together in isolated containers. These containers are lightweight, portable units that can run consistently across different environments.
+## Use this repository's Compose file
 
-### Key Docker Concepts
+From the project directory:
 
-- **Container**: A lightweight, standalone executable package that includes everything needed to run an application
-- **Image**: A read-only template used to create containers
-- **Dockerfile**: A script with instructions for building a Docker image
-- **Docker Compose**: A tool for defining and running multi-container applications
-- **Volume**: Persistent data storage that exists outside the container lifecycle
-
-### Benefits of Using Docker with Acestream Scraper
-
-1. **Simplified Installation**: No need to worry about dependencies or system compatibility
-2. **Consistent Environment**: Works the same way on any system that supports Docker
-3. **Built-in Services**: Easily includes Acestream Engine, ZeroNet, and Acexy proxy
-4. **Isolation**: Keeps the application and its dependencies contained
-5. **Easy Updates**: Simple command to update to the latest version
-6. **Resource Management**: Controls how much system resources the application can use
-
-## Docker vs. Docker Compose
-
-### Docker
-- Manages individual containers
-- Best for simple deployments
-- Uses CLI commands to configure containers
-- Example: `docker run -p 8040:8040 visesa84/acestream-scraper-pyacexy:latest`
-
-### Docker Compose
-- Manages multi-container applications
-- Configuration in a YAML file
-- Easier to maintain complex setups
-- Example: `docker-compose up -d`
-
-For Acestream Scraper, Docker Compose is recommended as it makes managing all configuration parameters easier.
-
-## Basic Docker Commands
-
-### Pull the Image
-```bash
-docker pull visesa84/acestream-scraper-pyacexy:latest
+```powershell
+docker compose up -d
+docker compose ps
+docker compose logs -f acestream-scraper
 ```
 
-### Run the Container
-```bash
-docker run -d -p 8040:8040 --name acestream-scraper visesa84/acestream-scraper-pyacexy:latest
+Open `http://localhost:8040`. Stop the service with `docker compose down`. The checked-in [`docker-compose.yml`](../docker-compose.yml) is the authoritative example for this checkout. It mounts configuration, recordings, and ZeroNet data and publishes the configured application and P2P ports.
+
+To update the image:
+
+```powershell
+docker compose pull
+docker compose up -d
 ```
 
-### View Running Containers
-```bash
-docker ps
-```
+The Compose file uses a floating `latest` tag. For reproducible deployments, pin an image version that you have verified.
 
-### View Container Logs
-```bash
-docker logs acestream-scraper
-```
+## Persistent data
 
-### Stop the Container
-```bash
-docker stop acestream-scraper
-```
+Keep these container paths mounted to retain state when a container is replaced:
 
-### Remove the Container
-```bash
-docker rm acestream-scraper
-```
+| Container path | Contents |
+|---|---|
+| `/app/config` | SQLite database (`acestream.db`) and application configuration |
+| `/app/config/recordings` | Recording files |
+| `/app/ZeroNet/data` | ZeroNet data |
 
-### Update to Latest Version
-```bash
-docker pull visesa84/acestream-scraper-pyacexy:latest
-docker stop acestream-scraper
-docker rm acestream-scraper
-# Run the container again with your preferred configuration
-```
+Back up the mounted directories before upgrades or database maintenance.
 
-## Docker Compose Commands
+## Services and ports
 
-### Start Services
-```bash
-docker-compose up -d
-```
+The current entrypoint runs the Flask/Gunicorn app on `FLASK_PORT` (default `8040`), Outpace on `6878` and `6879`, and ZeroNet. The Outpace peer listeners use `8621` and `8622`. When `ENABLE_ACESTREAM_SEARCH=true`, the bundled search engine uses HTTP port `6880` and P2P port `8625`. ZeroNet uses `43110` (UI), `43111`, and `26552`.
 
-### View Logs
-```bash
-docker-compose logs
-```
+Publish only the ports needed for your deployment. The checked-in Compose file publishes `8040`, `8621`, `8622`, `8625`, `43110`, `43111`, and `26552`; it does not publish every port exposed or used internally by the image.
 
-### Stop Services
-```bash
-docker-compose down
-```
+## Optional network features
 
-### Update to Latest Version
-```bash
-docker-compose pull
-docker-compose up -d
-```
+- `ENABLE_TOR=true` starts Tor for deployments that use ZeroNet over Tor.
+- `ENABLE_WARP=true` runs the WARP setup script. WARP requires `/dev/net/tun`, `NET_ADMIN`/`SYS_ADMIN` capabilities, and the relevant sysctls. The repository Compose file includes these permissions; only enable WARP when needed.
 
-## Docker Data Persistence
+## Notes about older examples
 
-Acestream Scraper uses Docker volumes to persist data:
-
-- `/app/config`: Configuration files including database
-- `/app/recordings`: Records files
-- `/app/ZeroNet/data`: ZeroNet data directory (if using ZeroNet)
-
-These volumes should be mounted to local directories to ensure your data persists when containers are updated or replaced.
-
-Example:
-```bash
-docker run -d -p 8040:8040 -v "${PWD}/config:/app/config" -v "${PWD}/recordings:/app/config/recordings" visesa84/acestream-scraper-pyacexy:latest
-```
-
-This mounts your local `./config` directory to the container's `/app/config` directory.
-
-## Environment Variables (Canonical Reference)
-
-The following table is the canonical reference for environment variables used by the Docker image and entrypoint. Override any value in your `docker run` or `docker-compose` configuration.
-
-| Variable | Default | Description |
-|---|---:|---|
-| `DOCKER_ENV` | (unset) | When present, container treats paths as Docker mounts and uses `/app/config` for config and DB. |
-| `ENABLE_ACEXY` | `true` | Enable the PyAcexy proxy. |
-| `ACEXY_LISTEN_ADDR` | `:8080` | Listen address for PyAcexy. |
-| `ACEXY_HOST` | `localhost` | Hostname/IP where PyAcexy connects to the engine. |
-| `ACEXY_PORT` | `6878` | Port of the Acestream Engine. |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. If `false`, entrypoint forces `CHECKSTATUS_ENABLED=false`. |
-| `ACESTREAM_HTTP_PORT` | `6878` | Main Acestream Engine HTTP port; background-checker uses `6879` internally. |
-| `CHECKSTATUS_ENABLED` | `true` | Enable automatic stream status checking; may be overridden by entrypoint logic. |
-
-Notes:
-- `start_two_engines.sh` and `bind_remap.so` are used to run a background checker engine while remapping P2P ports (default remap `8621`→`8622`) to avoid collisions.
+Older wiki sections describe PyAcexy and a two-AceStream-engine startup script. Those are not started by the current `entrypoint.sh`. The current stream services are Outpace; the bundled AceStream executable is started for the search feature. Base your configuration on the checked-in [Dockerfile](../Dockerfile), [entrypoint](../entrypoint.sh), and Compose file rather than copied legacy examples.

@@ -9,16 +9,12 @@ logger = logging.getLogger(__name__)
 
 class Config:
     """Configuration management class."""
-    # Constantes de clase (Valores por defecto)
-    DEFAULT_BASE_URL = 'acestream://'
-    DEFAULT_ACE_ENGINE_URL = 'http://localhost:6878'
-    # Background engine check URL is now obsolete as only the main engine runs.
-    DEFAULT_ACE_ENGINE_CHECK_URL = 'http://localhost:6878'
+    DEFAULT_BASE_URL = ''
     DEFAULT_RESCRAPE_INTERVAL = 24
     DEFAULT_CHECKSTATUS_INTERVAL = 24
     DEFAULT_CHECKSTATUS_ENABLED = True
-    DEFAULT_ADDPID = False
     DEFAULT_EPG_REFRESH_INTERVAL = 24
+    DEFAULT_STREAM_MODE = 'traditional'
     
     _instance = None
     config_path = None
@@ -80,20 +76,17 @@ class Config:
         if not self.settings_repo or os.environ.get('TESTING'):
             return
         
-        # DEFINICIÓN ESTÁTICA PARA EVITAR RECURSIÓN
         required_settings = {
             'base_url': self.DEFAULT_BASE_URL,
-            'ace_engine_url': self.DEFAULT_ACE_ENGINE_URL,
             'rescrape_interval': self.DEFAULT_RESCRAPE_INTERVAL,
             'checkstatus_interval': self.DEFAULT_CHECKSTATUS_INTERVAL,
             'checkstatus_enabled': self.DEFAULT_CHECKSTATUS_ENABLED,
-            'addpid': self.DEFAULT_ADDPID,
-            'epg_refresh_interval': self.DEFAULT_EPG_REFRESH_INTERVAL
+            'epg_refresh_interval': self.DEFAULT_EPG_REFRESH_INTERVAL,
+            'stream_mode': self.DEFAULT_STREAM_MODE
         }
         
         for key, default_value in required_settings.items():
             try:
-                # Usamos el repo directamente para no disparar los @property
                 if not self.settings_repo.get_setting(key):
                     self.logger.info(f"Setting default value for {key}: {default_value}")
                     self.settings_repo.set_setting(key, default_value)
@@ -115,7 +108,6 @@ class Config:
     
     def get(self, key, default=None):
         """Get a configuration value with database fallback."""
-        # IMPORTANTE: No llamar a _ensure_app_context si ya estamos inicializados
         if self._needs_init:
             self._ensure_app_context()
         
@@ -164,19 +156,6 @@ class Config:
     @base_url.setter
     def base_url(self, value):
         self.set('base_url', value)
-    
-    @property
-    def ace_engine_url(self):
-        return self.get('ace_engine_url', self.DEFAULT_ACE_ENGINE_URL)
-    
-    @ace_engine_url.setter
-    def ace_engine_url(self, value):
-        self.set('ace_engine_url', value)
-
-    @property
-    def ace_engine_check_url(self):
-        # Always returns the fixed background engine check URL; not stored in DB
-        return self.DEFAULT_ACE_ENGINE_CHECK_URL
 
     @property
     def rescrape_interval(self):
@@ -189,7 +168,6 @@ class Config:
     
     @property
     def checkstatus_interval(self):
-        # Protección contra recursión: si aún necesita init, devolvemos default
         if self._needs_init: return self.DEFAULT_CHECKSTATUS_INTERVAL
         val = self.get('checkstatus_interval', self.DEFAULT_CHECKSTATUS_INTERVAL)
         return int(val) if val is not None else self.DEFAULT_CHECKSTATUS_INTERVAL
@@ -201,8 +179,6 @@ class Config:
     @property
     def checkstatus_enabled(self):
         if self._needs_init: return self.DEFAULT_CHECKSTATUS_ENABLED
-        # Container-level override: entrypoint.sh exports CHECKSTATUS_ENABLED=false
-        # when ENABLE_ACESTREAM_ENGINE=false so workers never try to reach a dead engine.
         env_val = os.environ.get('CHECKSTATUS_ENABLED')
         if env_val is not None:
             return env_val.lower() in ('true', 'yes', '1', 'on')
@@ -213,24 +189,9 @@ class Config:
 
     @checkstatus_enabled.setter
     def checkstatus_enabled(self, value):
-        """Set whether automatic status check is enabled."""
-        # Convertimos cualquier entrada (bool, str, int) a un string 'true'/'false' estándar
         normalized_value = str(value).lower() in ['true', '1', 'on', 'yes']
         str_to_save = 'true' if normalized_value else 'false'
-        
-        self.logger.info(f"Saving checkstatus_enabled as: {str_to_save}")
         self.set('checkstatus_enabled', str_to_save)
-    
-    @property
-    def addpid(self):
-        val = self.get('addpid', self.DEFAULT_ADDPID)
-        if isinstance(val, str):
-            return val.lower() in ('true', 'yes', '1', 'on')
-        return bool(val)
-    
-    @addpid.setter
-    def addpid(self, value):
-        self.set('addpid', str(bool(value)).lower())
         
     @property
     def epg_refresh_interval(self):
@@ -240,6 +201,16 @@ class Config:
     @epg_refresh_interval.setter
     def epg_refresh_interval(self, value):
         self.set('epg_refresh_interval', str(value))
+
+    @property
+    def stream_mode(self):
+        val = self.get('stream_mode', self.DEFAULT_STREAM_MODE)
+        return val if val in ('traditional', 'hls') else self.DEFAULT_STREAM_MODE
+    
+    @stream_mode.setter
+    def stream_mode(self, value):
+        if value in ('traditional', 'hls'):
+            self.set('stream_mode', value)
         
     def is_initialized(self):
         self._ensure_app_context()

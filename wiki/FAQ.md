@@ -1,259 +1,41 @@
 # Frequently Asked Questions
 
-## General Questions
+## What does the application do?
 
-### What is Acestream Scraper?
-Acestream Scraper is an application that automatically discovers, manages, and organizes Acestream channels from various sources. It provides a web interface for channel management and generates M3U playlists that can be used with media players.
+It collects and organizes AceStream channel references, creates M3U playlists, associates streams with TV channels, imports XMLTV EPG data, checks stream availability, and schedules recordings. It does not provide the underlying channel content.
 
-### Is this application legal?
-Acestream Scraper itself is just a tool that manages links and generates playlists. The legality depends on the content you access and the laws in your region. The application doesn't host or distribute any content directly - it only organizes links that are already available elsewhere. Always ensure you have the proper rights to access any content and follow your local regulations.
+## Which stream service does the current Docker image run?
 
-### What is Acestream?
-Acestream is a peer-to-peer (P2P) media streaming technology based on the BitTorrent protocol. It allows users to stream audio and video content with minimal latency. Unlike traditional streaming, it distributes the load across users, making it efficient for high-quality streams.
+The current entrypoint starts Outpace on `6878` and a separate checker on `6879`. It can also start the bundled AceStream search engine on `6880` (P2P `8625`). The search engine and Outpace have separate roles. Older documentation describing PyAcexy or a built-in Acestream engine on the main stream port is obsolete for this checkout.
 
-### How does Acestream Scraper relate to Acestream Engine?
-Acestream Scraper is a management layer that works with Acestream Engine. The Engine handles the actual streaming, while the Scraper finds, organizes, and provides an interface to access channels. The Scraper can either use a built-in Acestream Engine or connect to an external one.
+## Do I need Docker?
 
-### What's the difference between Acestream Engine and Acexy?
-- **Acestream Engine**: The core technology that handles the P2P streaming
-- **PyAcexy**: An enhanced proxy interface for Acestream Engine that manages multiple connections efficiently
+Docker is recommended because it includes Outpace, ZeroNet, FFmpeg, and the other supporting binaries. A manual Python deployment may run the Flask app but does not automatically provide parity with all container services.
 
-Acexy acts as a connection manager between clients and the Acestream Engine. When multiple users access the same stream, the Acestream Engine needs a unique process identifier (PID) for each connection to handle them independently. Without proper PID management, when one stream ends, it might affect other clients.
+## Where is my data stored?
 
-Acexy handles this PID management automatically under the hood, so you don't need to manually add `pid=id` parameters to your stream URLs. It then proxies these properly formatted requests to the Acestream Engine, greatly simplifying the user experience and making multi-client setups more reliable.
+In Docker, the SQLite database and app configuration are under `/app/config`; recordings are under `/app/config/recordings`; ZeroNet data is under `/app/ZeroNet/data`. Keep these mounts and back them up when updating the container.
 
-## Installation Questions
+## How do I get a playlist?
 
-### Do I need Docker to use Acestream Scraper?
-No, but it's the recommended method. Docker simplifies installation by packaging all dependencies. You can also install manually if you have Python 3.10+ installed on your system, but you'll need to manage dependencies yourself.
+Use `http://localhost:8040/playlist.m3u`. Add `?refresh=true` to request a source refresh or `?search=term` to filter channels. The generated stream URLs depend on the configured base URL and stream mode.
 
-### How do I update to the latest version?
-If using Docker Compose:
-```bash
-docker-compose pull
-docker-compose up -d
-```
+## Why are channels missing or offline?
 
-If using Docker directly:
-```bash
-docker pull visesa84/acestream-scraper-pyacexy:latest
-docker stop acestream-scraper
-docker rm acestream-scraper
-# Then run the container again with your preferred configuration
-```
+Check that the source URL is enabled and its last scrape succeeded. Source pages can change or stop publishing references. Stream availability also depends on the upstream channel, peers, network connectivity, and a working backend. Use the channel check status and inspect the relevant service logs.
 
-### Will my data be lost when I update?
-No, as long as you've properly mounted the volumes for `/app/config` and (if using ZeroNet) `/app/ZeroNet/data`. These volumes store your configuration and data persistently outside the container.
+## How do I configure a TV guide or record a program?
 
-## Configuration Questions
+Add an XMLTV source under EPG, refresh its data, map its guide channels to TV channels, then schedule a program from the guide. Recordings need a reachable stream and are written to `/app/config/recordings`.
 
-### What's the difference between base_url and ace_engine_url?
-- **base_url**: The URL format used in the generated M3U playlists (e.g., `acestream://` or `http://localhost:6878/ace/getstream?id=`)
-- **ace_engine_url**: The URL of your Acestream Engine for checking channel status (e.g., `http://localhost:6878`)
+## How do I enable Tor or WARP?
 
-### What's the difference between Acestream Engine and PyAcexy?
-- **Acestream Engine**: The core technology that handles the P2P streaming
-- **PyAcexy**: An enhanced proxy interface for Acestream Engine
+Set `ENABLE_TOR=true` for Tor. WARP requires `ENABLE_WARP=true`, a TUN device, network capabilities, and sysctls; see [Configuration](Configuration.md) and the provided Compose file. Do not grant those privileges unless needed.
 
-### Which Base URL format should I use?
-It depends on your setup:
-- Use `acestream://` if your media player supports the Acestream protocol directly
-- Use `http://localhost:6878/ace/getstream?id=` for local HTTP streaming
-- Use `http://[server-ip]:8080/ace/getstream?id=` if using Acexy proxy
-- Use `http://[external-acestream]:port/ace/getstream?id=` for remote Acestream instances
+## How do I find the API?
 
-### How often does it update the channel list?
-By default, it rescans URLs every 24 hours. You can change this with the `rescrape_interval` setting in the configuration page or by setting the value when going through the setup wizard.
+Open `http://localhost:8040/api/docs`. The health resource is `http://localhost:8040/api/health/`.
 
-### How often does it update the status channel?
-By default, it rescans streams every 24 hours. You can change this with the `checkstatus_interval` setting in the configuration page or by setting the value when going through the setup wizard.
+## Is it safe to expose the app publicly?
 
-### What is Cloudflare WARP and why would I use it?
-Cloudflare WARP is a privacy-focused VPN-like service that encrypts your traffic and routes it through Cloudflare's global network. Benefits include:
-- **Privacy**: Encrypts your internet traffic
-- **Access**: Can bypass certain geographical restrictions
-- **Performance**: Often provides optimized routing through Cloudflare's network
-- **Security**: Protection against certain network-based attacks
-
-### How do I enable WARP in Acestream Scraper?
-You need to add specific Docker capabilities and environment variables:
-```bash
-docker run -d \
-  -p 8040:8040 \
-  --cap-add NET_ADMIN \
-  --cap-add SYS_ADMIN \
-  --device /dev/net/tun:/dev/net/tun \
-  --sysctl net.ipv4.conf.all.src_valid_mark=1 \
-  --sysctl net.ipv4.ip_forward=1 \
-  -e ENABLE_WARP=true \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-### What WARP modes are available?
-- **WARP**: Full tunnel mode - routes all traffic through WARP
-- **Off**: WARP disabled but the service remains running
-
-### How do I use WARP+ or Team features?
-If you have a license key for WARP+ or a WARP Team account:
-1. Navigate to the Configuration page in the web interface
-2. Find the WARP License Management section
-3. Enter your license key and register it
-4. Alternatively, set the `WARP_LICENSE_KEY` environment variable when starting the container
-
-### How do I specify URL types when adding sources?
-
-When adding URLs to scrape, you can explicitly select the URL type:
-
-1. **Regular HTTP**: For standard websites using HTTP or HTTPS protocols
-2. **ZeroNet**: For ZeroNet-specific URLs
-
-The application provides a dropdown menu next to the URL input field to select the type. This is important because:
-
-- **Regular HTTP URLs**: Will be accessed directly via HTTP/HTTPS protocols
-- **ZeroNet URLs**: Will be accessed via the ZeroNet network (either internal or external)
-
-It's important to correctly specify the URL type when adding sources to ensure the application can access the content properly.
-
-### Do I need ZeroNet running inside the container to use ZeroNet URLs?
-
-No, you can use ZeroNet URLs with an external ZeroNet service by:
-
-1. Explicitly selecting "ZeroNet" as the URL type when adding the URL
-2. Providing the full URL to your external ZeroNet service
-
-This flexibility allows you to:
-- Use ZeroNet running inside the container (simplest approach)
-- Connect to a ZeroNet service running elsewhere on your network
-- Use publicly accessible ZeroNet gateways
-
-## Usage Questions
-
-### How do I access the web interface?
-After starting the container, open your browser and navigate to:
-- `http://localhost:8040` (or replace localhost with your server IP)
-
-### Why are some channels offline?
-Acestream channels may go offline for several reasons:
-- The original broadcaster stopped streaming
-- Network issues between you and the peers
-- Not enough peers to provide the stream
-- Channel ID has changed
-
-### How do I add my own channels manually?
-1. Go to the Dashboard
-2. Find the "Add Channel" form
-3. Enter the Acestream ID (the hash) and a name for the channel
-4. Click "Add"
-
-### How do I use the playlist with my media player?
-1. Copy the playlist URL: `http://[your-server]:8040/playlist.m3u`
-2. In your media player (like VLC), select "Open Network Stream" or similar
-3. Paste the URL and play
-4. For auto-updating playlists, use the URL directly rather than downloading the file
-
-## Troubleshooting Questions
-
-### My channels are all showing as offline
-1. Check if your Acestream Engine is running (`ENABLE_ACESTREAM_ENGINE=true` or external)
-2. Verify the `ace_engine_url` points to the correct address
-3. Make sure the necessary ports are open (6878 for Acestream Engine)
-4. Try refreshing one of your URLs to get updated channel information
-
-### The Docker container fails to start
-Check the logs for errors:
-```bash
-docker logs acestream-scraper
-```
-Common issues include:
-- Port conflicts (another service using port 8040)
-- Invalid environment variables
-- Insufficient permissions on mounted volumes
-
-### ZeroNet is not working
-1. If using TOR, ensure TOR is properly configured (`ENABLE_TOR=true`)
-2. Check if ports 43110 and 43111 are mapped correctly
-3. Some ZeroNet sites may be unavailable or require specific permissions
-
-### Media player can't access the streams
-1. Ensure your media player has access to the Acestream Engine
-2. Check if you're using the correct Base URL format for your setup
-3. Verify the channel is online using the "Check Status" button
-4. If using Acexy, make sure it's properly configured and running
-
-### WARP shows as "Running but Not Connected"
-1. Check the WARP section in the Configuration page
-2. Try clicking the "Connect" button
-4. Ensure your container has the proper capabilities (`NET_ADMIN`, `SYS_ADMIN`, `DEVICE` and `SYSCTL`, )
-5. Check container logs for WARP-related errors
-
-### I can see Acestream channels on a website in my browser, but the app doesn't find any when scraping it
-This is usually caused by one of these issues:
-
-1. **JavaScript-dependent content**: The website uses JavaScript to dynamically display content. Our scraper doesn't execute JavaScript like a browser does.
-   
-2. **Wrong URL type selection**: Make sure you're using the correct URL type:
-   - Use `Regular HTTP` for standard websites
-   - Use `ZeroNet` for ZeroNet sites
-
-3. **Content requires authentication**: The site might require login cookies that the scraper doesn't have.
-
-4. **Content is in iframes**: The channels might be loaded in iframes from another domain that our scraper doesn't automatically follow.
-
-5. **Anti-scraping protections**: The site might have measures to detect and block automated scraping.
-
-Solutions to try:
-- Inspect the site in your browser's developer tools to find direct links to M3U playlists
-- Try scraping a different page on the same site that has a simpler structure
-- Add channels manually if scraping consistently fails
-- Use the browser developer tools (F12) to find the actual Acestream IDs in the page source
-- If the site lists channels in a consistent format, consider submitting a feature request for a specialized scraper
-
-## Advanced Questions
-
-### Can I run multiple instances?
-Yes, but you need to change the port mappings to avoid conflicts. For example:
-```yaml
-ports:
-  - "8041:8040"  # First instance
-  - "8042:8040"  # Second instance
-```
-
-### How can I contribute to the project?
-Contributions are welcome! You can:
-- Fork the repository on GitHub
-- Submit pull requests with improvements
-- Report bugs or suggest features
-- Help improve the documentation
-
-### Can I customize the appearance of the web interface?
-The web interface uses Bootstrap and standard Flask templates. You can customize it by:
-1. Mounting your custom templates to `/app/app/templates`
-2. Adding custom CSS through static files
-3. Developing your own theme (advanced)
-
-### How do I monitor the application's health?
-The application includes comprehensive health checks:
-- HTTP endpoint: `/health`
-- Docker health checks are configured
-- You can use monitoring tools like Prometheus with the health endpoint
-
-## Environment Variables (Canonical Reference)
-
-Include the following environment variables when reporting issues or configuring deployments:
-
-| Variable | Default | Description |
-|---|---:|---|
-| `DOCKER_ENV` | (unset) | When set, container uses `/app/config` for DB and config. |
-| `ENABLE_ACEXY` | `true` | PyAcexy proxy enabled. |
-| `ACEXY_HOST` | `localhost` | Host/IP for PyAcexy engine connections. |
-| `ACEXY_PORT` | `6878` | Port for Acestream Engine. |
-| `ACEXY_BUFFER_SIZE` | `10` | Buffer size (MB) for PyAcexy. |
-| `ACEXY_NO_RESPONSE_TIMEOUT` | `15` | Timeout for engine responses (s). |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. |
-| `ACESTREAM_HTTP_PORT` | `6878` | Main engine HTTP port; background uses `6879`. |
-| `CHECKSTATUS_ENABLED` | `true` | Controls automatic stream checks; may be forced off by entrypoint. |
-
-Include these values in bug reports to help reproduce environment-specific issues.
+Do not expose the UI, API, ZeroNet UI, or streaming ports to an untrusted network without a deliberate access-control and reverse-proxy setup. The Flask app's forwarded-header handling is not a substitute for authentication.

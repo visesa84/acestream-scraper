@@ -22,6 +22,8 @@ from app.api.controllers.epg_controller import api as epg_ns
 from app.api.controllers.tv_channels_controller import api as tv_channels_ns
 from app.api.controllers.recordings_controller import api as recordings_ns
 from app.api.controllers.blacklist_controller import api as blacklist_ns
+from app.api.controllers.active_streams_controller import api as active_streams_ns
+from app.api.controllers.users_controller import api as users_ns
 
 # Add namespaces to the API
 api.add_namespace(stats_ns, path='/stats')
@@ -36,6 +38,8 @@ api.add_namespace(epg_ns, path='/epg')
 api.add_namespace(tv_channels_ns, path='/tv-channels')
 api.add_namespace(recordings_ns, path='/recordings')
 api.add_namespace(blacklist_ns, path='/blacklist')
+api.add_namespace(active_streams_ns, path='/active-streams')
+api.add_namespace(users_ns, path='/users')
 
 # Register the config routes with the config namespace
 from . import config_routes

@@ -8,6 +8,7 @@ from .epg_program import EPGProgram
 from .recording_schedule import RecordingSchedule
 from .tv_channel import TVChannel
 from .epg_channel import EPGChannel
+from .user import User
 
 __all__ = [
     'AcestreamChannel', 
@@ -23,5 +24,6 @@ __all__ = [
     'RecordingSchedule',
     'TVChannel',
     'EPGChannel',
-    'BlacklistedChannel'
+    'BlacklistedChannel',
+    'User'
 ]

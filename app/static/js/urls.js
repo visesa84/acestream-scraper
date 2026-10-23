@@ -60,7 +60,11 @@ async function refreshUrl(id) {
         await handleApiResponse(response, 'URL refreshed successfully');
         
         // Refresh dashboard data
-        await refreshData();
+        if (typeof refreshData === 'function') {
+			await refreshData();
+		} else if (typeof loadUrlsList === 'function') {
+			await loadUrlsList();
+		}
     } catch (error) {
         console.error('Error refreshing URL:', error);
         showAlert('danger', 'Failed to refresh URL: ' + error.message);
@@ -97,7 +101,11 @@ async function addUrl(url, urlType = 'regular') {
         await handleApiResponse(response, isWebUrl ? 'URL added successfully' : 'Channel search completed');
         
         // Refresh dashboard data
-        await refreshData();
+        if (typeof refreshData === 'function') {
+			await refreshData();
+		} else if (typeof loadUrlsList === 'function') {
+			await loadUrlsList();
+		}
         return true;
     } catch (error) {
         console.error('Error adding URL or Search:', error);

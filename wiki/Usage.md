@@ -1,229 +1,57 @@
 # Usage Guide
 
-This guide explains how to use Acestream Scraper once it's installed.
+## Open the application
 
-## Contents
-- [Web Interface](#web-interface)
-- [Dashboard](#dashboard)
-- [Channel Management](#channel-management)
-- [URL Management](#url-management)
-- [Configuration Page](#configuration-page)
-- [WARP Management](#warp-management)
-- [M3U Playlist](#m3u-playlist)
-- [API Documentation](#api-documentation)
-- [PyAcexy Interface](#pyacexy-interface)
-- [Cloudflare WARP](#cloudflare-warp)
+Start the Docker deployment and visit `http://localhost:8040`. On a new installation, complete the setup wizard before using the dashboard. The main pages are Dashboard, Channels, Search, Configuration, TV Channels, EPG, Streams, and Recordings.
 
-## Web Interface
+## Add and refresh sources
 
-Access the web interface by navigating to `http://localhost:8040` in your browser.
+In Configuration, add a source URL and choose its type:
 
-![Dashboard Screenshot](https://github.com/visesa84/acestream-scraper-PyAcexy/blob/main/Dashboard.png)
+- **Regular** for HTTP/HTTPS pages.
+- **ZeroNet** for ZeroNet content; the container's ZeroNet service listens on port `43110`.
 
-### Dashboard
+Use the source list to enable/disable a source, refresh it, or remove it. The scraper updates the channel catalog from the results. Manual channel entries are managed separately and are not scraped as pages.
 
-The dashboard provides an overview of your Acestream channels and system status. From here you can:
+## Manage channels
 
-- View channel statistics (total, online, offline)
-- Search for specific channels
-- Download the M3U playlist
-- Access configuration settings
-- View PyAcexy proxy status (if enabled)
+Use the channel list on the Dashboard to add, edit, search, check, enable/disable, or delete AceStream entries. Search can also query the bundled AceStream search service when that service is enabled. Channel checks depend on a reachable stream backend and may take time.
 
-#### Dashboard Controls
+The blacklist lets you exclude matches from scraped results. A TV channel is a separate grouping entity: assign one or more stream IDs to it so the UI and EPG can treat them as alternate streams for the same station. See [TV channel management](tasks/channel-management.md).
 
-- **Search Box**: Filter channels by name
-- **Check All Status**: Verify which channels are currently online
-- **Refresh**: Update the dashboard data
-- **Download Playlist**: Generate and download the M3U playlist
-- **Configuration**: Access the settings page
+## EPG, streams, and recordings
 
-### Config Management
+1. Add an XMLTV-compatible EPG URL in EPG management.
+2. Fetch the guide and map EPG channel IDs to TV channels (manually or using the available matching tools).
+3. Review schedules and choose a program to schedule or cancel a recording.
+4. Use Recordings to view scheduled/active jobs and completed files.
 
-![Config Screenshot](https://github.com/visesa84/acestream-scraper-PyAcexy/blob/main/Config.png)
+Recordings are written beneath `/app/config/recordings` in the Docker image. FFmpeg is used to capture streams and process completed recording parts.
 
-### Channel Management
+The Streams page provides stream management/status information. The application supports `traditional` and `hls` stream modes; select the mode in Configuration.
 
-Acestream Scraper allows you to manage channels in several ways:
+## M3U playlists
 
-#### Adding Channels Manually
+The playlist endpoint is:
 
-1. Enter a channel ID (the Acestream hash) and name in the form
-2. Click "Add Channel"
-3. The channel will appear in your channel list
+```text
+http://localhost:8040/playlist.m3u
+```
 
-#### Searching Channels
+Supported query options:
 
-1. Use the search box to filter channels by name
-2. The list will update in real-time as you type
-3. Channel count will reflect your search results
+- Force a source refresh: `?refresh=true`
+- Filter by channel name: `?search=sports`
+- Set a playlist base URL for that response: `?base_url=http%3A%2F%2Fhost%2Fstream%3Fid%3D`
 
-#### Checking Channel Status
+Add the URL as a network playlist in a compatible player. The output stream URLs depend on the configured base URL and stream mode. The application does not relay or guarantee that the source stream is available.
 
-1. Click the "Check Status" button next to a channel or "Check All Status" at the top
-2. The system will verify if the channel is available
-3. Status will be displayed with color coding (green for online, red for offline)
+## REST API
 
-#### Deleting Channels
+Swagger documentation is available at `/api/docs`. The API includes resources for channels, source URLs, playlists, statistics, health, configuration, AceStream search, EPG, TV channels, recordings, blacklist entries, active streams, WARP, and users. Consult the interactive schema for current request and response formats.
 
-1. Find the channel you want to delete
-2. Click the "Delete" button next to it
-3. Confirm deletion when prompted
+The health resource is `/api/health/`. The Docker healthcheck script is separate; use `docker inspect`/`docker compose ps` to see the container health state.
 
-### URL Management
+## Network exposure
 
-URLs are sources that contain Acestream channel information. The system will scrape these URLs to discover channels.
-
-#### Adding URLs
-
-1. Go to the Configuration page
-2. Enter a URL in the "Add New URL" form
-3. Select the appropriate URL type:
-   - **Regular HTTP**: For standard websites
-   - **ZeroNet**: For ZeroNet sites (either internal or external)
-4. Click "Add URL"
-5. The system will begin scraping the URL for channels
-
-When selecting the URL type:
-- Choose "Regular HTTP" for standard websites
-- Choose "ZeroNet" for any ZeroNet URLs, including:
-  - Internal ZeroNet sites (zero://, http://127.0.0.1:43110/)
-  - External ZeroNet services or gateways
-
-#### Refreshing URLs
-
-1. Find the URL in the list
-2. Click the "Refresh" button
-3. The system will scrape the URL again for updated channel information
-
-#### Enabling/Disabling URLs
-
-1. Find the URL in the list
-2. Click the "Enable/Disable" button
-3. Disabled URLs won't be included in automatic rescans
-
-#### Deleting URLs
-
-1. Find the URL in the list
-2. Click the "Delete" button
-3. Confirm deletion when prompted
-
-### Configuration Page
-
-The configuration page allows you to modify system settings:
-
-- **Base URL**: How to format channel URLs in the playlist
-- **Ace Engine URL**: Connection to your Acestream Engine
-- **Rescrape Interval**: How often to automatically check for new channels
-- **PyAcexy Status**: View the status of the PyAcexy proxy (if enabled)
-- **Acestream Engine Status**: View the status of the Acestream Engine
-- **WARP Status**: View and manage Cloudflare WARP connection (if enabled)
-
-### WARP Management
-
-If Cloudflare WARP is enabled in your container, you can manage it through the Configuration page:
-
-#### WARP Status
-
-- View connection status (Connected, Running but Not Connected, Not Running)
-- See your current connection mode (WARP, Off)
-- Check your account type (Free, Premium)
-- View your public IP address through WARP
-
-#### WARP Controls
-
-- Connect/Disconnect from WARP
-- Change WARP mode (WARP, Off)
-- Register a license key for WARP+ or Team accounts
-
-#### WARP Connection Details
-
-When connected to WARP, detailed Cloudflare trace information is available showing:
-- WARP connection status
-- Current IP address and location
-- Cloudflare datacenter handling your connection
-- Connection protocol details
-- Server information
-
-## M3U Playlist
-
-The M3U playlist can be used with media players like VLC, Kodi, or any other player that supports M3U playlists.
-
-### Accessing the Playlist
-
-Base URL: `http://localhost:8040/playlist.m3u`
-
-#### Playlist Options
-
-- **Force refresh**: `http://localhost:8040/playlist.m3u?refresh=true`
-- **Search channels**: `http://localhost:8040/playlist.m3u?search=sports`
-- **Combined options**: `http://localhost:8040/playlist.m3u?refresh=true&search=sports`
-
-### Using in Media Players
-
-1. Copy the playlist URL (http://localhost:8040/playlist.m3u)
-2. In your media player, select "Open Network Stream" or similar option
-3. Paste the URL and play
-
-### URL Formatting Note
-
-- When using PyAcexy proxy (port 8080), stream URLs are formatted as `{base_url}{channel_id}`
-- For all other configurations, `&pid={local_id}` is automatically appended to each stream URL: `{base_url}{channel_id}&pid={local_id}`
-- This ensures proper channel identification in various player environments
-
-## API Documentation
-
-Acestream Scraper provides an OpenAPI/Swagger interface for developers:
-
-1. Access the API docs at: `http://localhost:8040/api/docs`
-2. Browse available endpoints and their parameters
-3. Test API calls directly from the browser interface
-
-### Key API Endpoints
-
-- `/api/channels` - Manage channels
-- `/api/urls` - Manage URLs to scrape
-- `/api/stats` - Get system statistics
-- `/api/config` - View and update configuration
-- `/api/playlists` - Generate playlists
-- `/api/health` - Check system health
-- `/api/warp` - Manage Cloudflare WARP connection
-
-## PyAcexy Interface
-
-If you enabled PyAcexy (recommended):
-
-1. Access the PyAcexy status endpoint at: `http://localhost:8080/ace/status`
-2. Check PyAcexy status directly in the main dashboard
-3. Manage your Acestream connections through this web interface
-
-## Cloudflare WARP
-
-When enabled, Cloudflare WARP provides these benefits:
-
-1. **Enhanced Privacy**: Your traffic is encrypted and routed through Cloudflare's network
-2. **Geo-Blocking Bypass**: Access content that might be regionally restricted
-3. **Improved Security**: Protection from various network-based attacks
-4. **Better Performance**: Optimized routing through Cloudflare's global network
-
-To use WARP features:
-1. Make sure the container is running with `-e ENABLE_WARP=true` and required capabilities (`--cap-add NET_ADMIN --cap-add SYS_ADMIN --device /dev/net/tun:/dev/net/tun --sysctl net.ipv4.conf.all.src_valid_mark=1 --sysctl net.ipv4.ip_forward=1`)
-2. Navigate to the Configuration page
-3. Use the WARP controls to connect, disconnect, or change modes
-4. Optionally register a WARP+ or Team license for premium features
-
-## Environment Variables (Canonical Reference)
-
-Canonical environment variables for runtime configuration:
-
-| Variable | Default | Description |
-|---|---:|---|
-| `DOCKER_ENV` | (unset) | When set, container uses `/app/config` for config and DB. |
-| `ENABLE_ACEXY` | `true` | Enable PyAcexy proxy. |
-| `ACEXY_HOST` | `localhost` | Host/IP where PyAcexy connects to the engine. |
-| `ACEXY_PORT` | `6878` | Port of the Acestream Engine. |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. If `false`, entrypoint forces `CHECKSTATUS_ENABLED=false`. |
-| `ACESTREAM_HTTP_PORT` | `6878` | Main engine HTTP port; background-checker uses `6879` internally. |
-| `CHECKSTATUS_ENABLED` | `true` | Controls automatic stream checks; entrypoint may override based on engine settings. |
-
-Ensure these match your deployment topology (local engine vs external engine) so the app's health and check logic behave as expected.
+Keep the UI and API on a trusted network or behind an appropriately configured authentication-enabled reverse proxy. Do not expose ZeroNet's UI or the streaming ports publicly unless you understand the access controls and network implications.

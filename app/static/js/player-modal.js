@@ -24,46 +24,33 @@ style.innerHTML = `
 `;
 document.head.appendChild(style);
 
-// Function to get the base URL from config
-async function getAceEngineUrl() {
-    try {
-        const response = await fetch('/api/config/ace_engine_url');
-        const data = await response.json();
-        return data.ace_engine_url || 'http://127.0.0.1:6878'; // Default to localhost if not set
-    } catch (error) {
-        console.error('Error fetching Ace Engine URL:', error);
-        return 'http://127.0.0.1:6878'; // Default to localhost on error
-    }
-}
-
 async function getBaseUrl() {
     try {
+        // Obtenemos el origen actual exacto (incluyendo el protocolo, la IP/dominio y el puerto dinámico de Flask)
+        const currentOrigin = window.location.origin;
+        
+        // Verificamos si hay una URL base configurada en el backend que el usuario haya querido forzar
         const response = await fetch('/api/config/base_url');
         const data = await response.json();
         
-        const currentHost = window.location.hostname;
-        const isIp = (h) => {
-            const parts = h.split(".");
-            return parts.length === 4 && parts.every(p => !isNaN(p));
-        };
-
-        // Si entramos por DOMINIO
-        if (!isIp(currentHost) && currentHost !== 'localhost') {
-            // IMPORTANTE: No ponemos :8080
-            return `${window.location.protocol}//${currentHost}/ace/getstream?id=`;
-        } 
-        
-        // Si entramos por IP LOCAL
-        else {
-            // Aquí sí necesitamos el puerto 8080
-            return `http://${currentHost}:8080/ace/getstream?id=`;
+        if (data.base_url && data.base_url.trim() !== '') {
+            let customBase = data.base_url.trim().replace(/\/$/, '');
+            // Si la base configurada no incluye la ruta del stream, la añadimos según el modo
+            if (!customBase.includes('/ace/getstream') && !customBase.includes('/streams/ace/')) {
+                return `${customBase}/ace/getstream?id=`;
+            }
+            return customBase.endsWith('=') ? customBase : `${customBase}?id=`;
         }
+
+        // Por defecto, utilizamos siempre el origen actual dinámico
+        return `${currentOrigin}/ace/getstream?id=`;
     } catch (error) {
-        console.error('Error fetching base URL:', error);
-        return `${window.location.protocol}//${window.location.hostname}/ace/getstream?id=`;
+        console.error('Error fetching base URL, falling back to window.location.origin:', error);
+        return `${window.location.origin}/ace/getstream?id=`;
     }
 }
 
+// Open the player options modal for a stream
 // Open the player options modal for a stream
 async function showPlayerOptions(streamId) {
     if (!streamId) {
@@ -71,8 +58,6 @@ async function showPlayerOptions(streamId) {
         return;
     }
     
-    // 1. Obtener la URL del motor
-    const aceEngineUrl = await getAceEngineUrl();
     const baseUrl = await getBaseUrl();
     const fullStreamUrl = `${baseUrl}${streamId}`;
     
@@ -109,7 +94,6 @@ async function showPlayerOptions(streamId) {
 
     document.body.insertAdjacentHTML('beforeend', modalHTML);
     
-    // Add escape key listener to close modal
     document.addEventListener('keydown', function closeOnEscape(e) {
         if (e.key === 'Escape') {
             const modal = document.getElementById('playerOptionsModal');
@@ -120,7 +104,6 @@ async function showPlayerOptions(streamId) {
         }
     });
     
-    // Add click outside to close
     document.getElementById('playerOptionsModal').addEventListener('click', function(event) {
         if (event.target === this) {
             this.remove();

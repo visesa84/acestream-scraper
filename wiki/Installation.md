@@ -1,245 +1,55 @@
 # Installation Guide
 
-This guide covers different methods for installing and setting up Acestream Scraper.
+## Recommended: Docker Compose
 
-## Contents
-- [Docker Compose Method (Recommended)](#docker-compose-method-recommended)
-- [Docker Method](#docker-method)
-- [Manual Installation](#manual-installation)
+Install Docker Engine/Desktop and the Docker Compose plugin. From the project directory, start the checked-in configuration:
 
-## Docker Compose Method (Recommended)
+```powershell
+docker compose up -d
+docker compose ps
+```
 
-Docker Compose provides the easiest way to get started with Acestream Scraper.
+Open `http://localhost:8040` and complete the setup wizard. The repository Compose file already defines the current image, environment variables, port mappings, Linux network permissions, and persistent directories. Review it before deploying to a server, particularly before publishing ports outside your LAN.
 
-### Prerequisites
-- Docker and Docker Compose installed on your system
-- Basic understanding of Docker (see [Docker Guide](Docker.md))
+Stop the deployment with:
 
-### Steps
+```powershell
+docker compose down
+```
 
-1. **Create a docker-compose.yml file:**
+The Compose mounts preserve the database/configuration (`/app/config`), recordings (`/app/config/recordings`), and ZeroNet data (`/app/ZeroNet/data`). Do not remove those host directories when updating the container.
 
-   ```yaml
-   version: '3.8'
+## Docker without Compose
 
-   services:
-     acestream-scraper:
-       image: visesa84/acestream-scraper-pyacexy
-       container_name: Acestream_Proxy
-	   restart: unless-stopped
-		cap_add:
-		  - NET_ADMIN
-		  - SYS_ADMIN
-		devices:
-		  - /dev/net/tun:/dev/net/tun
-		sysctls:
-		  - net.ipv4.conf.all.src_valid_mark=1
-		  - net.ipv4.ip_forward=1
-       environment:
-         - TZ=Europe/Madrid
-		 - ENABLE_TOR=false
-		 - ENABLE_ACEXY=true
-		 - ENABLE_ACESTREAM_ENGINE=true
-		 - ENABLE_WARP=false
-		 - CONTAINER_NETWORK_MODE=host
-		 - WARP_LICENSE_KEY=
-		 - ACESTREAM_HTTP_PORT=6878
-		 - ACESTREAM_HTTP_HOST=ACEXY_HOST
-             restart: unless-stopped
-             cap_add:
-               - NET_ADMIN
-               - SYS_ADMIN
-             devices:
-               - /dev/net/tun:/dev/net/tun
-             sysctls:
-               - net.ipv4.conf.all.src_valid_mark=1
-               - net.ipv4.ip_forward=1
-		 - ACEXY_LISTEN_ADDR=:8080
-		 - ACEXY_HOST=localhost
-		 - ACEXY_PORT=6878
-		 - ACEXY_NO_RESPONSE_TIMEOUT=15
-		 - ACEXY_BUFFER_SIZE=10
-		 - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
-		 - MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:1000
-		 - EXTRA_FLAGS="--cache-dir /tmp --cache-limit 2 --log-stderr --log-stderr-level error --max-connections 300 --max-peers 50 --core-dlrate-helper 0 --stats-report-interval 10 --live-cache-type memory --live-cache-size 209715200"
-       ports:
-         - "8040:8040"  # Flask application
-         - "8080:8080"  # Acexy proxy
-         - "8621:8621"  # Acestream P2P Port
-         - "43110:43110"  # ZeroNet UI
-         - "43111:43111"  # ZeroNet peer
-         - "26552:26552"  # ZeroNet peer
-       volumes:
-         - ./data/zeronet:/app/ZeroNet/data
-         - ./data/config:/app/config
-		 - ./data/recordings:/app/config/recordings
-       healthcheck:
-         test: ["CMD", "/app/healthcheck.sh"]
-         interval: 30s
-         timeout: 10s
-         retries: 3
-         start_period: 60s
-   ```
+The minimum web-app invocation is:
 
-2. **Start the service:**
-
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Access the application:**
-   
-   Open your browser and navigate to `http://localhost:8040`
-   
-   The first-time setup wizard will guide you through configuration
-
-## Docker Method
-
-If you prefer using Docker without Docker Compose, follow these steps:
-
-### Basic Installation
-
-```bash
-docker pull visesa84/acestream-scraper-pyacexy:latest
-docker run -d \
-  -p 8040:8040 \
-  -v "${PWD}/config:/app/config" \
-      ## Environment Variables (Canonical Reference)
-
-      Key environment variables for running the container or app manually:
-
-      | Variable | Default | Description |
-      |---|---:|---|
-      | `DOCKER_ENV` | (unset) | When present, use `/app/config` inside container. |
-      | `FLASK_PORT` | `8040` | Flask application port. |
-      | `ENABLE_ACEXY` | `true` | Enable PyAcexy proxy. |
-      | `ACEXY_HOST` | `localhost` | Engine host for PyAcexy connections. |
-      | `ACEXY_PORT` | `6878` | Engine port for PyAcexy. |
-      | `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. |
-      | `CHECKSTATUS_ENABLED` | `true` | Enable automatic stream status checking. |
-      | `ACESTREAM_HTTP_PORT` | `6878` | Main engine HTTP port (background uses `6879`). |
-
-      See `wiki/Configuration.md` for full descriptions and notes.
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
+```powershell
+docker run -d --name acestream-scraper `
+  -p 8040:8040 `
+  -v "${PWD}/config:/app/config" `
+  -v "${PWD}/recordings:/app/config/recordings" `
   visesa84/acestream-scraper-pyacexy:latest
 ```
 
-### With Acexy and Internal Acestream Engine
+This minimal command does not publish the P2P, ZeroNet, or optional search ports and does not grant WARP's required network privileges. For the full port and permission setup, use the checked-in `docker-compose.yml`.
 
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 8080:8080 \
-  -e ENABLE_ACEXY=true \
-  -e ENABLE_ACESTREAM_ENGINE=true \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
+## Manual Python installation
 
-### With External Acestream Engine
+Manual installation runs the Flask application and requires a compatible Python environment. It does not automatically install or start all the daemons and binaries bundled in the Docker image.
 
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 8080:8080 \
-  -e ENABLE_ACEXY=true \
-  -e ENABLE_ACESTREAM_ENGINE=false \
-  -e ACEXY_HOST=192.168.1.100 \
-  -e ACEXY_PORT=6878 \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
+1. Install Python 3.10 or newer and FFmpeg if you need recording support.
+2. Create and activate a virtual environment.
+3. Install the dependencies:
 
-### With ZeroNet (TOR disabled)
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 43110:43110 \
-  -p 43111:43111 \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  -v "${PWD}/zeronet_data:/app/ZeroNet/data" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-### With ZeroNet (TOR enabled)
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 43110:43110 \
-  -p 43111:43111 \
-  -e ENABLE_TOR=true \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  -v "${PWD}/zeronet_data:/app/ZeroNet/data" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-## Manual Installation
-
-For advanced users who want to run the application directly on their system:
-
-### Prerequisites
-- Python 3.10 or higher
-- pip package manager
-
-### Steps
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/visesa84/acestream-scraper-PyAcexy.git
-   cd acestream-scraper
+   ```powershell
+   python -m pip install -r requirements.txt
+   python -m pip install -r requirements-prod.txt
    ```
 
-2. **Set up virtual environment:**
+4. Start the WSGI application with a WSGI server, for example:
 
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   pip install -r requirements.txt
+   ```powershell
+   gunicorn --bind 127.0.0.1:8040 wsgi:app
    ```
 
-3. **Create configuration:**
-
-   ```bash
-   mkdir -p config
-   ```
-   
-   Create a `config/config.json` file:
-
-   ```json
-   {
-       "urls": [
-           "https://example.com/url1",
-           "https://example.com/url2"
-       ],
-       "base_url": "http://127.0.0.1:8008/ace/getstream?id=",
-       "ace_engine_url": "http://127.0.0.1:6878"
-   }
-   ```
-
-4. **Run the application:**
-
-   For development:
-   ```bash
-   python run_dev.py
-   ```
-
-   For production:
-   ```bash
-   python wsgi.py
-   ```
-
-5. **Access the application:**
-   
-   Open your browser and navigate to `http://localhost:8040`
+The app creates its local `config` directory and SQLite database. Complete setup in the browser at `http://127.0.0.1:8040`. To use scraping, streaming, ZeroNet, status checks, or recordings, configure or install the corresponding external services; the Docker image's Outpace and ZeroNet processes are not started by this manual command.

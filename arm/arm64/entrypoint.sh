@@ -16,27 +16,35 @@ $LOG_DIR/*.log {
 }
 EOF
 
+echo "Starting cron daemon..."
+cron || true
+
 # Run logrotate once to ensure config is valid
-logrotate /etc/logrotate.d/acestream-services --debug
+logrotate /etc/logrotate.d/acestream-services --debug || true
+
+# Preparamos las variables de control de procesos
+OUTPACE_PID=""
+OUTPACE_CHECK_STREAM_PID=""
+ZERONET_PID=""
+GUNICORN_PID=""
+ACESTREAM_SEARCH_PID=""
+
+# TRAP POSICIONADO AL PRINCIPIO: Asegura una salida limpia de TODOS los servicios
+cleanup() {
+    echo "Stopping all services cleanly..."
+    # Matamos solo los PIDs que se hayan llegado a inicializar
+    kill -TERM $GUNICORN_PID $ZERONET_PID $OUTPACE_PID $ACESTREAM_SEARCH_PID 2>/dev/null || true
+    exit 0
+}
+trap cleanup INT TERM EXIT
+
+export ENABLE_WARP=${ENABLE_WARP:-false}
 
 # Initialize WARP if enabled
 if [ "${ENABLE_WARP}" = "true" ]; then
     echo "Initializing Cloudflare WARP..."
     /app/warp-setup.sh
 fi
-
-# Set ENABLE_ACESTREAM_ENGINE to match ENABLE_ACEXY if not explicitly set
-if [ -z "${ENABLE_ACESTREAM_ENGINE+x}" ]; then
-    export ENABLE_ACESTREAM_ENGINE=$ENABLE_ACEXY
-    echo "ENABLE_ACESTREAM_ENGINE not set, using ENABLE_ACEXY value: $ENABLE_ACESTREAM_ENGINE"
-fi
-# Update ACESTREAM_HTTP_HOST to use the actual value of ACEXY_HOST
-if [ "$ACESTREAM_HTTP_HOST" = "ACEXY_HOST" ]; then
-    export ACESTREAM_HTTP_HOST="$ACEXY_HOST"
-    echo "Setting ACESTREAM_HTTP_HOST to $ACEXY_HOST"
-fi
-# Note: Database migrations are now automatically handled in the Flask app startup
-# rather than in this script, preventing duplication of migration execution
 
 # Setup ZeroNet config if not exists
 ZERONET_CONFIG="/app/config/zeronet.conf"
@@ -64,53 +72,61 @@ if [ "$ENABLE_TOR" = "true" ]; then
     echo "Tor service logs available at $LOG_DIR/tor.log"
 fi
 
-# Start Acestream Engine if enabled
-if [ "$ENABLE_ACESTREAM_ENGINE" = "true" ]; then
-    echo "Starting Acestream engine..."
-    
-    # --- VARIABLES EXCLUSIVAS PARA EL MOTOR ---
-    export ACESTREAM_HOME=/acestream
-    export ANDROID_ROOT=/system
-    export ANDROID_DATA=/data
-    export PYTHONHOME=/acestream/python
-    export PYTHONPATH=/acestream/python/lib/stdlib:/acestream/python/lib/modules:/acestream/data:/acestream/modules.zip:/acestream/eggs-unpacked:/acestream/lib
-    export LD_LIBRARY_PATH=/system/lib64:/system/lib:/acestream/python/lib
-    
-    # Quitamos comillas de los flags
-    EXTRA_FLAGS=$(echo $EXTRA_FLAGS | sed 's/"//g')
-    
-    # Ejecutamos el motor (usando su propio binario de python)
-    /acestream/python/bin/python /acestream/main.py --client-console --http-port $ACESTREAM_HTTP_PORT $EXTRA_FLAGS --live-buffer $ACEXY_BUFFER_SIZE >> "$LOG_DIR/acestream.log" 2>&1 &  
-    
-    # --- LIMPIEZA INMEDIATA ---
-    unset PYTHONHOME
-    unset PYTHONPATH
-    unset LD_LIBRARY_PATH
-    
-    sleep 3
-    echo "Acestream engine logs available at $LOG_DIR/acestream.log"
-fi
+# --- Start Outpace ---
+echo "Starting Outpace engine with experimental AceStream compatibility enabled..."
+export OUTPACE_BIND=0.0.0.0:6878
+export OUTPACE_RTMP_BIND=0.0.0.0:1935
+export OUTPACE_PEER_LISTEN=0.0.0.0:8621
+export OUTPACE_DATA_DIR=/root/.local/share/outpace
+export OUTPACE_EXPERIMENTAL_ACE_COMPAT=1
+export OUTPACE_MAX_ACTIVE_UPSTREAMS=6
+export OUTPACE_MAX_PARALLEL_CONNECT=16
+export OUTPACE_REQUEST_TIMEOUT_MS=3500
+export OUTPACE_CONNECT_TIMEOUT_MS=5000
+export OUTPACE_READ_TIMEOUT_MS=10000
+export OUTPACE_CACHE_SIZE_MB=128
+export OUTPACE_MAX_CONNECTIONS_PER_STREAM=35
 
-# Start PyAcexy if enabled
-if [ "$ENABLE_ACEXY" = "true" ]; then
-    if [ "$ENABLE_ACESTREAM_ENGINE" = "false" ] && [ "$ACEXY_HOST" = "localhost" ] && [ "$ACEXY_PORT" = "6878" ]; then
-        echo "ERROR: When Acestream Engine is disabled, you must specify ACEXY_HOST and ACEXY_PORT other than localhost to connect to an external Acestream Engine instance"
-        exit 1
-    fi
-    
-    echo "Starting PyAcexy proxy..."
-    export ACEXY_HOST
-    export ACEXY_PORT
-    python /usr/local/bin/pyacexy >> "$LOG_DIR/pyacexy.log" 2>&1 &
-    echo "PyAcexy proxy logs available at $LOG_DIR/pyacexy.log"
-else
-    echo "PyAcexy is disabled."
+outpace serve >> "$LOG_DIR/outpace.log" 2>&1 &
+OUTPACE_PID=$!
+
+sleep 3
+echo "Outpace check stream engine startup log: $LOG_DIR/outpace_check_stream.log"
+
+# --- Start Outpace Check Stream Engine ---
+echo "Starting Outpace check stream engine..."
+export OUTPACE_BIND=0.0.0.0:6879
+unset OUTPACE_RTMP_BIND
+export OUTPACE_PEER_LISTEN=0.0.0.0:8622
+export OUTPACE_DATA_DIR=/root/.local/share/outpace_check
+export OUTPACE_EXPERIMENTAL_ACE_COMPAT=1
+export OUTPACE_MAX_ACTIVE_UPSTREAMS=4
+export OUTPACE_MAX_PARALLEL_CONNECT=8
+export OUTPACE_REQUEST_TIMEOUT_MS=3500
+export OUTPACE_CONNECT_TIMEOUT_MS=5000
+export OUTPACE_READ_TIMEOUT_MS=10000
+export OUTPACE_CACHE_SIZE_MB=32
+
+outpace serve >> "$LOG_DIR/outpace_check_stream.log" 2>&1 &
+OUTPACE_CHECK_STREAM_PID=$!
+
+sleep 3
+echo "Outpace engine startup log: $LOG_DIR/outpace.log"
+
+export ENABLE_ACESTREAM_SEARCH=${ENABLE_ACESTREAM_SEARCH:-false}
+
+if [ "$ENABLE_ACESTREAM_SEARCH" = "true" ]; then
+	/opt/acestream/start-engine --client-console --http-port 6880 --port 8625 >> "$LOG_DIR/acestream.log" 2>&1 & 
+	ACESTREAM_SEARCH_PID=$!	
+
+	sleep 3
+	echo "Acestream engine startup log: $LOG_DIR/acestream.log"
 fi
 
 # Start ZeroNet in the background
 cd /app/ZeroNet
 echo "Starting ZeroNet..."
-python zeronet.py main >> "$LOG_DIR/zeronet.log" 2>&1 &
+python3 zeronet.py main >> "$LOG_DIR/zeronet.log" 2>&1 &
 ZERONET_PID=$!
 echo "ZeroNet logs available at $LOG_DIR/zeronet.log"
 
@@ -118,8 +134,17 @@ echo "ZeroNet logs available at $LOG_DIR/zeronet.log"
 echo "Waiting for ZeroNet to initialize..."
 sleep 10
 
-# Start Flask app with Gunicorn
+# Run database migrations before starting the app
 cd /app
+echo "Running database migrations..."
+python manage.py upgrade >> "$LOG_DIR/migrations.log" 2>&1
+if [ $? -ne 0 ]; then
+    echo "WARNING: Database migration failed — check $LOG_DIR/migrations.log"
+else
+    echo "Database migrations completed successfully."
+fi
+
+# Start Flask app with Gunicorn
 echo "Starting Flask application on port $FLASK_PORT..."
 gunicorn --bind "0.0.0.0:$FLASK_PORT" \
     --workers 4 \
@@ -133,8 +158,6 @@ gunicorn --bind "0.0.0.0:$FLASK_PORT" \
 GUNICORN_PID=$!
 
 echo "Services started. Monitoring processes..."
-# El trap ahora sí funcionará para limpiar todo al cerrar el contenedor
-trap "kill $GUNICORN_PID $ZERONET_PID; exit" INT TERM EXIT
 
 # Mantenemos el contenedor vivo monitorizando gunicorn
 wait $GUNICORN_PID

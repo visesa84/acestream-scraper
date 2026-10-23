@@ -3,20 +3,33 @@ import asyncio
 import threading
 import logging
 import fasteners
-import time
 import tempfile
-from flask import Flask, redirect, url_for
+from flask import Flask, redirect, url_for, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.extensions import db, migrate
-from app.tasks.recorder import process_recordings
+from app.models import User
 
-# El task_manager se define como None y se inicializa dentro de create_app
 task_manager = None
 
+def is_local_network(req):
+    """
+    Determina si la petición proviene de la red local basándose exclusivamente 
+    en la IP remota real (gestionada de forma segura por ProxyFix), 
+    eliminando el uso inseguro del encabezado Host.
+    """
+    ip = req.remote_addr or ''
+    if ip.startswith('::ffff:'):
+        ip = ip[7:]
+        
+    return (
+        ip in ('127.0.0.1', '::1') or
+        ip.startswith('192.168.') or
+        ip.startswith('10.') or
+        ip.startswith('172.') or
+        ip.startswith('169.254.')
+    )
+
 def create_app(test_config=None):
-    """Create and configure the Flask app."""
-    
-    # Importaciones locales para evitar IMPORTACIÓN CIRCULAR
     from app.utils.config import Config
     from app.tasks.manager import TaskManager
     from app.repositories import SettingsRepository
@@ -27,11 +40,10 @@ def create_app(test_config=None):
 
     app = Flask(__name__)
 
-    # Middleware para proxies (Docker/Nginx)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+    # ProxyFix configurado para confiar en las cabeceras del proxy (NPM)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1)
     app.config['PREFERRED_URL_SCHEME'] = 'http'
 
-    # Configuración de Logging
     logging_level = logging.DEBUG if os.environ.get('FLASK_ENV') == 'development' else logging.INFO
     logging.basicConfig(
         level=logging_level,
@@ -39,11 +51,9 @@ def create_app(test_config=None):
     )
     logger = logging.getLogger(__name__)
 
-    # Configuración básica
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev')
     app.config['DEBUG'] = os.environ.get('FLASK_ENV') == 'development'
 
-    # 1. Cargar Configuración Inicial
     try:
         config = Config()
         if config.database_path:
@@ -63,23 +73,18 @@ def create_app(test_config=None):
         logger.error(f"Error initializing Config: {e}")
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
 
-    # 2. Inicializar Extensiones
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # 3. Registrar Blueprints
     from app.api import bp as api_blueprint
     app.register_blueprint(api_blueprint, url_prefix='/api')
     
-    # Importamos el blueprint y el módulo para inyectar el manager
     from app.views.main import bp as main_blueprint
     import app.views.main as main_module
     
-    # Inyectar el task_manager global en el módulo de vistas
     main_module.task_manager = task_manager
     app.register_blueprint(main_blueprint)
     
-    # 4. Inicialización con Contexto de Aplicación
     is_testing = test_config == 'testing' or os.environ.get('TESTING') == '1'
     app.config['TESTING'] = is_testing
 
@@ -94,14 +99,12 @@ def create_app(test_config=None):
             settings_repo = SettingsRepository()
             config.set_settings_repository(settings_repo)
 
-            # Arrancar Task Manager con BLOQUEO DE PROCESO
             if not is_testing:
                 task_manager.init_app(app)
 
                 def run_background_loop():
-                    from app.tasks.recorder import process_recordings # Importación local
+                    from app.tasks.recorder import process_recordings 
                     
-                    # Use the system temp directory for the lock file for portability
                     tmpdir = tempfile.gettempdir()
                     lockfile = os.path.join(tmpdir, 'task_manager.lock')
                     lock = fasteners.InterProcessLock(lockfile)
@@ -117,19 +120,14 @@ def create_app(test_config=None):
                     asyncio.set_event_loop(loop)
                     
                     async def combined_tasks():
-                        # TaskManager
-                        # Si tu task_manager.start() es un bucle infinito, lo lanzamos como tarea
                         asyncio.create_task(task_manager.start())
                         
-                        # El Grabador
                         while True:
                             try:
-                                # Ejecutamos el grabador en un hilo separado para no bloquear el bucle asíncrono
                                 await loop.run_in_executor(None, process_recordings, app)
                             except Exception as e:
                                 logger.error(f"Error in recording worker: {e}")
                             
-                            # Esperar 60 segundos antes de la siguiente revisión
                             await asyncio.sleep(60)
 
                     try:
@@ -151,9 +149,51 @@ def create_app(test_config=None):
         except Exception as e:
             logger.error(f"Fatal error during app startup: {e}", exc_info=True)
 
+    @app.context_processor
+    def inject_config():
+        is_admin_user = False
+        current_user_obj = None
+        
+        try:
+            # Validación robusta basada en IP limpia mediante ProxyFix
+            if is_local_network(request):
+                admin_user = User.query.filter_by(is_admin=True).first()
+                if admin_user:
+                    current_user_obj = admin_user
+                    is_admin_user = True
+            else:
+                # Dominio externo exige HTTP Basic Auth
+                auth = request.authorization
+                if auth:
+                    user = User.query.filter_by(username=auth.username).first()
+                    if user and user.check_password(auth.password):
+                        current_user_obj = user
+                        is_admin_user = user.is_admin
+        except Exception as e:
+            logger.error(f"Error in inject_config auth: {e}")
+
+        return {
+            'enable_acestream_search': os.environ.get('ENABLE_ACESTREAM_SEARCH', 'true').lower() == 'true',
+            'enable_warp': os.environ.get('ENABLE_WARP', 'false').lower() == 'true',
+            'current_user': current_user_obj,
+            'is_admin': is_admin_user
+        }
+
     @app.route('/')
     def index():
-        # Ahora main.dashboard existirá porque el Blueprint se registró correctamente
-        return redirect(url_for('main.dashboard'))
+        """Gestiona la entrada a la raíz evitando bucles de redirección según el rol."""
+        try:
+            if not is_local_network(request):
+                auth = request.authorization
+                if auth:
+                    user = User.query.filter_by(username=auth.username).first()
+                    if user and user.check_password(auth.password):
+                        if not user.is_admin:
+                            return redirect(url_for('main.tv_channels'))
+        except Exception:
+            pass
+        
+        from app.views.main import dashboard
+        return dashboard()
 
     return app

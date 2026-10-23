@@ -1,93 +1,72 @@
 # Acestream Scraper
 
-A Python-based web scraping application that retrieves Acestream channel information and generates M3U playlists. Built using Flask, BeautifulSoup, and SQLAlchemy.
+![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![Docker](https://img.shields.io/badge/docker-supported-cyan.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-# I do not answer questions outside the discussions section or issues, if you reach me out directly with config issues I will block you.
+Acestream Scraper is a Flask application for collecting and organizing AceStream channel references, managing TV channels and EPG data, and serving playlists or stream links to compatible players. It stores application data in SQLite and provides a web UI and a REST API.
 
-## Features
+It does not provide channel content. Configure sources or channel IDs that you are entitled to use.
 
-- **Multi-arch support: amd64, arm64 (v8), arm32 (v7)**
-- Scrapes Acestream channel information from multiple URLs
-- Extracts channel names and URLs from both JSON data and HTML content
-- Generates M3U playlists with optional refresh
-- Refreshes channel data on demand
-- Displays channel metadata via web interface
-- Supports ZeroNet URLs
-- Database migrations support
-- Service-oriented architecture
-- Repository pattern for data access
-- **Built-in Acestream engine with PyAcexy proxy (optional)**
-- **Support for external Acestream Engine instances**
-- **Cloudflare WARP integration for enhanced privacy and geo-unblocking**
-- Channel Status Checking
-- PyAcexy status display in the dashboard
-- **Interactive setup wizard for easy configuration**
-- **Channel search functionality**
-- **Automatic rescraping at configurable intervals**
-- **API documentation via OpenAPI/Swagger UI**
-- **Enhanced health checking for all components**
-- **Enable or disable Stream**
-- **Record funcionality in TV Channels UI**
+## What it does
 
-## Quick Start
+- Scrapes HTTP/HTTPS and ZeroNet sources for channel IDs and metadata.
+- Lets you add and manage channels, search the catalog, filter out unwanted entries, and check stream availability.
+- Supports a separate TV-channel catalog that can group multiple AceStream IDs for the same channel.
+- Imports XMLTV EPG sources, maps guide entries to TV channels, and displays schedules.
+- Generates M3U playlists and supports traditional and HLS stream modes.
+- Schedules program recordings and processes recording files with FFmpeg.
+- Exposes a Flask web interface and a REST API with Swagger documentation.
+- Runs Outpace stream services in the Docker image; the bundled AceStream search engine can be enabled separately. ZeroNet, Tor, and Cloudflare WARP are included as optional supporting services/features.
 
-### Using Docker Compose (Easiest Method)
+## Run with Docker Compose
+
+The repository includes a Compose configuration with persistent mounts for the database/configuration, recordings, and ZeroNet data:
 
 1. **Create a docker-compose.yml file:**
 
-   ```yaml
-   version: '3.8'
+```
+version: '3.8'
 
-   services:
-     acestream-scraper:
-       image: visesa84/acestream-scraper-pyacexy:latest
-       container_name: acestream-scraper
-	   cap_add:
-		  - NET_ADMIN
-		  - SYS_ADMIN
-		devices:
-		  - /dev/net/tun:/dev/net/tun
-		sysctls:
-		  - net.ipv4.conf.all.src_valid_mark=1
-		  - net.ipv4.ip_forward=1
-       environment:
-		 - TZ=Europe/Madrid
-		 - ENABLE_TOR=false
-		 - ENABLE_ACEXY=true
-		 - ENABLE_ACESTREAM_ENGINE=true
-   		 - CHECKSTATUS_ENABLED=true
-		 - ENABLE_WARP=false
-		 - CONTAINER_NETWORK_MODE=host
-		 - WARP_LICENSE_KEY=
-		 - ACESTREAM_HTTP_PORT=6878
-		 - ACESTREAM_HTTP_HOST=ACEXY_HOST
-		 - FLASK_PORT=8040
-		 - ACEXY_LISTEN_ADDR=:8080
-		 - ACEXY_HOST=localhost
-		 - ACEXY_PORT=6878
-		 - ACEXY_NO_RESPONSE_TIMEOUT=15
-		 - ACEXY_BUFFER_SIZE=5
-		 - LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
-		 - MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:1000
-		 - EXTRA_FLAGS="--cache-dir /tmp --cache-limit 2 --log-stderr --log-stderr-level error --max-connections 300 --max-peers 50 --core-dlrate-helper 0 --stats-report-interval 10 --live-cache-type memory --live-cache-size 209715200"
-       ports:
-         - "8040:8040"  # Flask application
-         - "8080:8080"  #  proxy
-         - "8621:8621"  # Acestream P2P Port
-         - "43110:43110"  # ZeroNet UI
-         - "43111:43111"  # ZeroNet peer
-         - "26552:26552"  # ZeroNet peer
-       volumes:
-         - ./data/zeronet:/app/ZeroNet/data
-         - ./data/config:/app/config
-		 - ./data/recordings:/app/config/recordings
-       healthcheck:
-         test: ["CMD", "/app/healthcheck.sh"]
-         interval: 30s
-         timeout: 10s
-         retries: 3
-         start_period: 60s
-   ```
+services:
+  acestream-scraper:
+    image: visesa84/acestream-scraper:latest
+    container_name: Acestream_Proxy
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+    environment:
+      - TZ=Europe/Madrid
+      - ENABLE_TOR=false
+      - ENABLE_WARP=false
+      - CONTAINER_NETWORK_MODE=host
+      - WARP_LICENSE_KEY=
+      - FLASK_PORT=8040
+    ports:
+      - "1935:1935"  # Outpace RTMP Port
+      - "6878:6878"  # Outpace Port
+      - "8040:8040"  # Flask application
+      - "8621:8621"  # Outpace P2P Port
+      - "8622:8622"  # Outpace P2P Port
+      - "8625:8625"  # Acestream Search P2P Port
+      - "43110:43110"  # ZeroNet UI
+      - "43111:43111"  # ZeroNet peer
+      - "26552:26552"  # ZeroNet peer
+    volumes:
+      - ./data/zeronet:/app/ZeroNet/data
+      - ./data/config:/app/config
+      - ./data/recordings:/app/config/recordings
+    healthcheck:
+      test: ["CMD", "/app/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
 
 2. **Start the service:**
 
@@ -95,420 +74,67 @@ A Python-based web scraping application that retrieves Acestream channel informa
    docker-compose up -d
    ```
 
-3. **Access the application at `http://localhost:8040`**
+Open `http://localhost:8040`. On first launch, follow the setup wizard, then add sources or channels.
 
-### Using Docker (Alternative)
 
-[Image in Docker Hub](https://hub.docker.com/r/visesa84/acestream-scraper-pyacexy)
+The checked-in [docker-compose.yml](./docker-compose.yml) is the reference for the image tag, environment, port mappings, and volumes used by this checkout. Review it before exposing the service on a network. The main web port is `8040`; the Compose file also publishes the P2P, search-engine, and ZeroNet ports.
 
-1. **Pull and run the container:**
+## Data and configuration
 
-   ```bash
-   docker pull visesa84/acestream-scraper-pyacexy:latest
-   docker run -d \
-     -p 8040:8040 \
-     -v "${PWD}/config:/app/config" \
-	 -v "${PWD}/recordings:/app/config/recordings" \
-     --name acestream-scraper \
-     visesa84/acestream-scraper-pyacexy:latest
-   ```
+In the Docker image, `/app/config` is persistent application storage. It contains `acestream.db` and may contain `config.json`; recordings are stored in `/app/config/recordings`, and ZeroNet data is stored in `/app/ZeroNet/data`. Keep these mounts when replacing or updating a container.
 
-2. **Access the setup wizard:**
-   
-   Open your browser and navigate to `http://localhost:8040`
-   
-   The first-time setup wizard will guide you through configuration:
-   - Base URL format (acestream:// or http://)
-   - Acestream Engine settings
-   - Source URLs to scrape
-   - Rescrape interval
-   - Enable or disable Acestream check status
+Frequently used image environment variables:
 
-3. **Alternative: Manual configuration**
+| Variable | Image default | Purpose |
+|---|---:|---|
+| `FLASK_PORT` | `8040` | Web application port |
+| `TZ` | `Europe/Madrid` | Container timezone |
+| `ENABLE_TOR` | `false` | Start Tor for ZeroNet use |
+| `ENABLE_WARP` | `false` | Initialize Cloudflare WARP; requires tunnel/network permissions |
+| `ENABLE_ACESTREAM_SEARCH` | `true` | Start the bundled AceStream search service on port `6880` (P2P port `8625`) |
+| `CHECKSTATUS_ENABLED` | application setting | Enable automatic stream checks |
 
-   Create a `config/config.json` file:
+Application settings such as the playlist base URL, rescrape/check intervals, EPG refresh interval, and stream mode can be managed in the web UI. See [Configuration](./wiki/Configuration.md).
 
-   ```json
-   {
-       "urls": [
-           "https://example.com/url1",
-           "https://example.com/url2"
-       ],
-       "base_url": "http://127.0.0.1:8080/ace/getstream?id=",
-       "ace_engine_url": "http://127.0.0.1:6878"
-   }
-   ```
-
-### Running with PyAcexy and Internal Acestream Engine
-
-The image includes an embedded Acestream engine with the PyAcexy proxy interface, which provides a user-friendly web UI:
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 8080:8080 \
-  -e ENABLE_ACEXY=true \
-  -e ENABLE_ACESTREAM_ENGINE=true \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-PyAcexy only exposes an status endpoint available at `http://localhost:8080/ace/status`.
-
-### Using with External Acestream Engine
-
-You can connect the PyAcexy proxy to an external Acestream Engine instance:
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 8080:8080 \
-  -e ENABLE_ACEXY=true \
-  -e ENABLE_ACESTREAM_ENGINE=false \
-  -e ACEXY_HOST=192.168.1.100 \
-  -e ACEXY_PORT=6878 \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-### Using with ZeroNet
-
-The application can scrape ZeroNet sites for channel information:
-
-#### Running with TOR disabled
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 43110:43110 \
-  -p 43111:43111 \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  -v "${PWD}/zeronet_data:/app/ZeroNet/data" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-#### Running with TOR enabled
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 43110:43110 \
-  -p 43111:43111 \
-  -e ENABLE_TOR=true \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  -v "${PWD}/zeronet_data:/app/ZeroNet/data" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-### Using with Cloudflare WARP
-
-The application can use Cloudflare WARP to provide enhanced privacy and access to geo-restricted content:
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  --cap-add NET_ADMIN \
-  --cap-add SYS_ADMIN \
-  --device /dev/net/tun:/dev/net/tun \
-  --sysctl net.ipv4.conf.all.src_valid_mark=1 \
-  --sysctl net.ipv4.ip_forward=1 \
-  -e ENABLE_WARP=true \
-  -e CONTAINER_NETWORK_MODE=bridge \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-
-```
-
-> **Note:** WARP integration requires additional capabilities (`NET_ADMIN` and `SYS_ADMIN`) to create and manage network tunnels.
-
-### Manual Installation
-
-1. **Prerequisites:**
-   - Python 3.10 or higher
-   - pip
-
-2. **Setup:**
-
-   ```bash
-   git clone https://github.com/visesa84/acestream-scraper-pyacexy.git
-   cd acestream-scraper
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. **Create config and run:**
-
-   ```bash
-   mkdir -p config
-   # Create config/config.json as shown above
-   python wsgi.py     # For production
-   ```
-
-## Usage Guide
-
-### Web Interface
-
-Access the web interface at `http://localhost:8040`
+## Web Interface
 
 ![image](https://github.com/visesa84/acestream-scraper-PyAcexy/blob/main/Dashboard.png)
 ![image](https://github.com/visesa84/acestream-scraper-PyAcexy/blob/main/Config.png)
 
-#### Dashboard
+## Web pages and endpoints
 
-The main dashboard provides:
-- Channel statistics (total, online, offline)
-- Search functionality for channels
-- Download playlist button
-- Add/delete channels
-- URL management
-- Configuration options
+- Web UI: `/` (setup wizard on first run), `/dashboard` (channel catalog), `/search`, `/config`
+- TV channels and schedules: `/tv-channels`, `/epg`, `/streams`, `/recordings`
+- Playlist: `/playlist.m3u`; `?refresh=true` requests source refresh and `?search=term` filters the result
+- Swagger API documentation: `/api/docs`
+- Health API: `/api/health/`
 
-#### Channel Management
+## Runtime architecture
 
-- **Adding channels**: Enter a channel ID and name in the form
-- **Searching**: Use the search box to filter channels by name
-- **Status checking**: Click the "Check Status" button to verify if a channel is online
-- **Delete channels**: Remove unwanted channels with the delete button
+The image entrypoint starts the Flask/Gunicorn app, ZeroNet, and two Outpace processes (main stream listener on `6878` and a checker on `6879`). It can also start the AceStream search engine. The Outpace peer listeners use `8621` and `8622`; the search engine uses `8625`. Tor and WARP are optional.
 
-#### URL Management
+Older documentation referred to PyAcexy and to a built-in Acestream engine serving the main stream port. Those instructions do not describe the current entrypoint: the current stream services are Outpace, while the bundled AceStream process is used for search.
 
-- **Add new URLs**: Enter URLs to scrape in the "Add New URL" form
-- **Refresh URLs**: Update channel data by clicking "Refresh" on a URL
-- **Enable/Disable URLs**: Toggle URLs on/off without deleting them
-- **Delete URLs**: Remove URLs you no longer want to scrape
+## Development
 
-### M3U Playlist
+The project uses Python, Flask, SQLAlchemy, and Flask-Migrate. Install the dependencies from `requirements.txt` and `requirements-prod.txt` as appropriate, then run the WSGI application with a compatible server. The Docker image is the supported way to run the full set of bundled services.
 
-Get the M3U playlist for your media player:
+## Documentation
 
-- Current playlist: `http://localhost:8040/playlist.m3u`
-- Force refresh: `http://localhost:8040/playlist.m3u?refresh=true`
-- Search channels: `http://localhost:8040/playlist.m3u?search=sports`
-
-To use in your media player (like VLC):
-1. Copy the playlist URL (http://localhost:8040/playlist.m3u)
-2. In your media player, select "Open Network Stream" or similar option
-3. Paste the URL and play
-
-**URL Formatting Note:**
-- When using Pyacexy proxy (port 8080), stream URLs are formatted as `{base_url}{channel_id}`
-- For all other configurations, `&pid={local_id}` is automatically appended to each stream URL: `{base_url}{channel_id}&pid={local_id}`
-- This ensures proper channel identification in various player environments
-
-### API Documentation
-
-The application provides OpenAPI/Swagger documentation:
-
-- Access at: `http://localhost:8040/api/docs`
-- Interactive API documentation for developers
-- Test endpoints directly from the browser
-
-### Pyacexy Interface
-
-If you enabled PyAcexy (recommended):
-
-- Access the Pyacexy interface at: `http://localhost:8080`
-- Check PyAcexy status directly in the main dashboard
-- Manage your Acestream connections through a user-friendly web interface
-
-## Configuration
-
-### Application Settings
-
-Configure through the setup wizard or directly in `config.json`:
-
-- `urls`: Array of URLs to scrape for Acestream channels
-- `base_url`: Base URL format for playlist generation (e.g., `acestream://` or `http://localhost:6878/ace/getstream?id=`)
-- `ace_engine_url`: URL of your Acestream Engine instance (default: `http://127.0.0.1:6878`)
-- `checkstatus_interval`: How often to refresh All Check Status Channel (in hours, default: 24)
-- `checkstatus_enabled`: Enable or disable Check Status Channels (default: True)
-
-### Environment Variables
-
-#### Core Application
-
-- `FLASK_PORT`: Port the Flask application runs on (default: `8040`)
-
-#### Acestream Configuration
-
-- `ENABLE_ACESTREAM_ENGINE`: Enable built-in Acestream Engine (default: matches `ENABLE_ACEXY`)
-- `ACESTREAM_HTTP_PORT`: Port for Acestream engine (default: `6878`)
-- `ACESTREAM_HTTP_HOST`: Host for Acestream engine (default: uses value of `ACEXY_HOST`)
-
-#### PyAcexy Configuration
-
-PyAcexy provides an enhanced proxy interface for Acestream, with a web UI for better management:
-
-- `ENABLE_ACEXY`: Set to `true` to enable Pyacexy proxy (default: `false`)
-- `ACEXY_LISTEN_ADDR`: Address for PyAcexy to listen on (default: `:8080`)
-- `ACEXY_HOST`: Hostname of the Acestream Engine to connect to (default: `localhost`)
-- `ACEXY_PORT`: Port of the Acestream Engine to connect to (default: `6878`)
-- `ACEXY_NO_RESPONSE_TIMEOUT`: Timeout for Acestream responses (default: `15`)
-- `ACEXY_BUFFER_SIZE`: Buffer size for data transfers (default: `5`)
-
-#### WARP Configuration
-
-Cloudflare WARP provides enhanced privacy and secure tunneling:
-
-- `ENABLE_WARP`: Set to `true` to enable Cloudflare WARP (default: `false`)
-- `CONTAINER_NETWORK_MODE`: Set to `host` or `bridge` (default: `host`)
-- `WARP_LICENSE_KEY`: Optional license key for WARP+ or WARP Team
-
-#### Other Settings
-
-- `ENABLE_TOR`: Enable TOR for ZeroNet connections (default: `false`)
-- `TZ`: Timezone for the container (default: `Europe/Madrid`)
-
-## Environment Variables (Canonical Reference)
-
-The table below is the canonical reference for environment variables used by the image and entrypoint. Defaults shown match the image defaults; override them in `docker run` or `docker-compose` as needed.
-
-| Variable | Default | Description |
-|---|---:|---|
-| `DOCKER_ENV` | (unset) | When present, container treats paths as Docker mounts and uses `/app/config` for config and DB. |
-| `FLASK_PORT` | `8040` | Port the Flask application listens on. |
-| `ENABLE_ACEXY` | `true` | Enable the PyAcexy proxy. |
-| `ACEXY_LISTEN_ADDR` | `:8080` | Listen address for PyAcexy. |
-| `ACEXY_HOST` | `localhost` | Hostname/IP of the Acestream Engine PyAcexy connects to. |
-| `ACEXY_PORT` | `6878` | Port of the Acestream Engine. |
-| `ACEXY_NO_RESPONSE_TIMEOUT` | `15` | Timeout (s) for Acestream responses. |
-| `ACEXY_BUFFER_SIZE` | `10` | Buffer size (MB) for PyAcexy transfers. |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. If `false`, entrypoint forces `CHECKSTATUS_ENABLED=false`. |
-| `ACESTREAM_HTTP_PORT` | `6878` | Main Acestream Engine HTTP port. Background checker uses `6879` internally. |
-| `ACESTREAM_HTTP_HOST` | (uses `ACEXY_HOST`) | Host used to address the engine. |
-| `CHECKSTATUS_ENABLED` | `true` | Controls automatic stream status checking; entrypoint may override based on engine settings. |
-| `EXTRA_FLAGS` | (image default) | Extra flags passed to the Acestream engine binary. |
-| `LD_PRELOAD` | jemalloc path | Preloaded library path; image sets jemalloc by default. |
-| `MALLOC_CONF` | `dirty_decay_ms:1000,muzzy_decay_ms:1000` | jemalloc config string. |
-
-Notes:
-- The entrypoint supports two start modes: `main-only` and `both` (main + background). `background-only` is not supported.
-- If `ACEXY_HOST` points to an external host, the entrypoint disables internal engines and sets `CHECKSTATUS_ENABLED=false` because the built-in background check URL is always `http://localhost:6879`.
-- The helper script `start_two_engines.sh` and `bind_remap.so` are used to run a background checker engine without colliding the P2P port (`8621` → `8622` remap for the background instance).
-
-### Channel Status Checking
-
-The application verifies if channels are available:
-
-- Shows which channels are online/offline in the dashboard
-- Click "Check Status" button to verify individual channels
-- Status history and error messages displayed in the UI
-
-To use this feature:
-
-1. Ensure you have Acestream Engine running (built-in if ENABLE_ACESTREAM_ENGINE=true)
-2. Configure `ace_engine_url` to point to your Acestream Engine instance
-3. Use the "Check Status" buttons in the UI to verify channel availability
-
-### Port Mapping
-
-- `8040`: Main web interface (configurable via `FLASK_PORT`)
-- `43110`: ZeroNet web interface (if ZeroNet enabled)
-- `43111`: ZeroNet transport port (if ZeroNet enabled)
-- `8080`: PyAcexy web interface (if enabled)
-- `6878`: Acestream HTTP API port (configurable via `ACESTREAM_HTTP_PORT`)
-- `26552`: Additional ZeroNet peer port
-
-### Volumes
-
-When using Docker, mount these volumes:
-
-- `/app/config`: Configuration files
-- `/app/recordings`: Records files
-- `/app/ZeroNet/data`: ZeroNet data directory (if using ZeroNet)
-
-### ZeroNet Configuration
-
-The application looks for a `zeronet.conf` file in the `/app/config` directory. If none exists, it creates one with default values:
-
-```bash
-[global]
-ui_ip = *
-ui_host =
- 0.0.0.0
- localhost
-ui_port = 43110
-```
-
-To customize ZeroNet access:
-
-1. Create your own `config/zeronet.conf`:
-
-```bash
-[global]
-ui_ip = *
-ui_host =
- 127.0.0.1
- your.domain.com
- localhost:43110
-ui_port = 43110
-```
-
-2. Mount it when running the container:
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  -p 43110:43110 \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-### Running Behind a Reverse Proxy
-
-The application includes proper headers handling for running behind a reverse proxy:
-
-- Automatic handling of SSL/TLS termination
-- Correct handling of X-Forwarded-Proto and X-Forwarded-Host headers
-- Works with nginx, Apache, Traefik or other reverse proxies
-
-### Security Note
-
-- Add your domain(s) to `ui_host` for public access
-- Always include `localhost` for local access
-- Configure a Custom Location in the Proxy to route the /ace path to port 8080. The URL generator utilizes Access List from Reverse Proxy to inject credentials and the domain into the streaming links
-
-### Healthchecks
-
-The container includes comprehensive health checking:
-
-- Main application health check at `/health` endpoint providing detailed status
-- PyAcexy health check (if enabled)
-- Acestream Engine health check (if enabled)
-- Automatic monitoring of internal services
-- Graceful handling of service dependencies
-
-## Architecture
-
-The application follows a service-oriented architecture with:
-
-- Repository pattern for data access
-- Service layer for business logic
-- Migrations support for database changes
-- Async task management
-- Clear separation of concerns
-- Integration with external services (Acestream, Pyacexy, ZeroNet)
-
-## Contributing
-
-Contributions are welcome! Please fork the repository and create a pull request with your changes.
+- [Wiki home](./wiki/Home.md)
+- [Installation](./wiki/Installation.md)
+- [Docker deployment](./wiki/Docker.md)
+- [Usage](./wiki/Usage.md)
+- [Configuration](./wiki/Configuration.md)
+- [Requirements](./wiki/Requirements.md)
+- [FAQ](./wiki/FAQ.md)
+- [Bug reporting](./wiki/Bug-Reporting.md)
+- [Contributing scraper data](./wiki/Contributing-Scraper-Data.md)
 
 ## Acknowledgements
 
+This project uses Flask, SQLAlchemy, BeautifulSoup, Outpace, ZeroNet, FFmpeg, and other open-source software. See the dependency manifests and upstream projects for their respective licenses.
+
 Special thanks to the developers of Flask, BeautifulSoup, SQLAlchemy, and other dependencies used in this project.
 - [Acestream-scrapper](https://github.com/Pipepito/acestream-scraper) - Enhanced Acestream Scraper interface
-- [Pyacexy](https://github.com/wafy80/pyacexy) - Enhanced Acestream proxy interface with Python
-- [Acestream-http-proxy](https://github.com/martinbjeldbak/acestream-http-proxy) - HTTP proxy for Acestream
+- [Outpace](https://github.com/jamezrin/outpace) - AceStream reimplementation in Rust

@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from app.tasks.manager import TaskManager
 from urllib.parse import unquote
 import logging
+import fcntl
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -75,86 +77,107 @@ class URLList(Resource):
                 import asyncio
                 import inspect
 
-                search_service = AcestreamSearchService()
+                # --- CERROJO EXCLUSIVO POR ARCHIVO PARA CONCURRENCIA DE WORKERS ---
+                lock_file_path = "/tmp/url_management.lock"
+                os.makedirs(os.path.dirname(lock_file_path), exist_ok=True)
                 
-                # Ejecutar barrido masivo con search_all_pages
-                if inspect.iscoroutinefunction(search_service.search_all_pages):
-                    raw_response = asyncio.run(search_service.search_all_pages(query=input_text))
-                else:
-                    raw_response = search_service.search_all_pages(query=input_text)
+                with open(lock_file_path, "w") as lock_file:
+                    try:
+                        fcntl.flock(lock_file, fcntl.LOCK_EX)
+                    except Exception as flock_err:
+                        logger.warning(f"No se pudo adquirir el cerrojo exclusivo: {flock_err}")
 
-                if isinstance(raw_response, dict):
-                    results_list = raw_response.get('results', [])
-                else:
-                    results_list = raw_response or []
-
-                if not results_list:
-                    return {'error': f'No Acestream channels found for query "{input_text}"'}, 404
-
-                # Crear slug para la URL virtual
-                slug = input_text.lower().replace(' ', '-')
-                virtual_url = f"search://{slug}"
-
-                # Guardar la fuente virtual
-                existing = url_repo.get_by_url(virtual_url)
-                if not existing:
-                    url_obj = url_repo.add(virtual_url, 'search')
-                    url_obj.status = 'OK'
-                    url_repo.update(url_obj)
-                else:
-                    url_obj = existing
-
-                # Traer patrones de la Blacklist Global
-                blacklist_patterns = [b.pattern.lower().strip() for b in BlacklistedChannel.query.all()]
-
-                added_count = 0
-                ignored_count = 0
-                seen_ids = set()
-
-                # --- DESACTIVAR AUTOFLUSH TEMPORALMENTE (EVITA IntegrityError) ---
-                with db.session.no_autoflush:
-                    for res in results_list:
-                        if not isinstance(res, dict):
-                            continue
-                            
-                        content_id = res.get('content_id') or res.get('id') or res.get('acestream_id')
-                        raw_name = res.get('name') or input_text
-                        channel_name = clean_channel_name(raw_name)
+                    try:
+                        search_service = AcestreamSearchService()
                         
-                        if content_id and content_id not in seen_ids:
-                            name_lower = channel_name.lower().strip()
-                            id_lower = content_id.lower().strip()
+                        # Ejecutar barrido masivo con search_all_pages
+                        if inspect.iscoroutinefunction(search_service.search_all_pages):
+                            raw_response = asyncio.run(search_service.search_all_pages(query=input_text))
+                        else:
+                            raw_response = search_service.search_all_pages(query=input_text)
 
-                            # Filtrado de Blacklist Global
-                            is_blacklisted = any(
-                                pattern in name_lower or pattern in id_lower 
-                                for pattern in blacklist_patterns
-                            )
+                        if isinstance(raw_response, dict):
+                            results_list = raw_response.get('results', [])
+                        else:
+                            results_list = raw_response or []
 
-                            if is_blacklisted:
-                                logger.info(f"[Blacklist] Skipping channel: '{channel_name}' (ID: {content_id})")
-                                ignored_count += 1
-                                continue
+                        if not results_list:
+                            return {'error': f'No Acestream channels found for query "{input_text}"'}, 404
 
-                            seen_ids.add(content_id)
-                            
-                            channel_repo.update_or_create(
-                                channel_id=content_id,
-                                name=channel_name,
-                                source_url=virtual_url,
-                                metadata=res.get('metadata') or {}
-                            )
-                            added_count += 1
+                        # Crear slug para la URL virtual
+                        slug = input_text.lower().replace(' ', '-')
+                        virtual_url = f"search://{slug}"
 
-                channel_repo.commit()
+                        # Guardar la fuente virtual
+                        existing = url_repo.get_by_url(virtual_url)
+                        if not existing:
+                            url_obj = url_repo.add(virtual_url, 'search')
+                            url_obj.status = 'OK'
+                            url_repo.update(url_obj)
+                        else:
+                            url_obj = existing
 
-                return {
-                    'message': f'Search complete. Added {added_count} channels ({ignored_count} ignored by blacklist) for "{input_text}"',
-                    'url': virtual_url,
-                    'url_type': 'search',
-                    'channels_added': added_count,
-                    'channels_ignored': ignored_count
-                }, 201
+                        # Traer patrones de la Blacklist Global
+                        blacklist_patterns = [b.pattern.lower().strip() for b in BlacklistedChannel.query.all()]
+
+                        added_count = 0
+                        ignored_count = 0
+                        seen_ids = set()
+
+                        # --- DESACTIVAR AUTOFLUSH TEMPORALMENTE ---
+                        with db.session.no_autoflush:
+                            for res in results_list:
+                                if not isinstance(res, dict):
+                                    continue
+                                    
+                                content_id = res.get('content_id') or res.get('id') or res.get('acestream_id')
+                                raw_name = res.get('name') or input_text
+                                channel_name = clean_channel_name(raw_name)
+                                
+                                if content_id and content_id not in seen_ids:
+                                    name_lower = channel_name.lower().strip()
+                                    id_lower = content_id.lower().strip()
+
+                                    # Filtrado de Blacklist Global
+                                    is_blacklisted = any(
+                                        pattern in name_lower or pattern in id_lower 
+                                        for pattern in blacklist_patterns
+                                    )
+
+                                    if is_blacklisted:
+                                        logger.info(f"[Blacklist] Skipping channel: '{channel_name}' (ID: {content_id})")
+                                        ignored_count += 1
+                                        continue
+
+                                    seen_ids.add(content_id)
+                                    
+                                    channel_repo.update_or_create(
+                                        channel_id=content_id,
+                                        name=channel_name,
+                                        source_url=virtual_url,
+                                        metadata=res.get('metadata') or {}
+                                    )
+                                    added_count += 1
+
+                        try:
+                            channel_repo.commit()
+                        except Exception as db_err:
+                            db.session.rollback()
+                            logger.warning(f"Conflicto de concurrencia al guardar transacciones duplicadas: {db_err}")
+
+                        return {
+                            'message': f'Search complete. Added {added_count} channels ({ignored_count} ignored by blacklist) for "{input_text}"',
+                            'url': virtual_url,
+                            'url_type': 'search',
+                            'channels_added': added_count,
+                            'channels_ignored': ignored_count
+                        }, 201
+
+                    finally:
+                        try:
+                            fcntl.flock(lock_file, fcntl.LOCK_UN)
+                        except Exception:
+                            pass
 
             # ----------------------------------------------------
             # 2. FLUJO NORMAL PARA URLS TRADICIONALES

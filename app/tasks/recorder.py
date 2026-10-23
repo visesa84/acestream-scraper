@@ -12,18 +12,23 @@ from app.models import RecordingSchedule, EPGProgram, TVChannel, AcestreamChanne
 # Pool de conversión limitado a 2 tareas simultáneas para no saturar la CPU/Disco
 executor = ThreadPoolExecutor(max_workers=2)
 
+# Conjunto y bloqueo para evitar conversiones simultáneas del mismo archivo
+active_conversions = set()
+conversion_lock = threading.Lock()
+
 def fast_remux_to_mp4(input_ts, output_mp4):
     """
-    Re-codifica de forma ligera a MP4 estándar (H.264 + AAC) 
-    para garantizar compatibilidad total y evitar archivos vacíos o corruptos.
+    Transcodifica de forma segura a H.264/AAC estándar para evitar 
+    cualquier corrupción y errores de memoria en Firefox.
     """
     cmd = [
         'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
         '-fflags', '+genpts+discardcorrupt',
-        '-err_detect', 'ignore_err',
         '-i', input_ts,
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', # Re-codificación rápida y ligera
-        '-c:a', 'aac', '-b:a', '192k',                          # Audio AAC compatible
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
+        '-pix_fmt', 'yuv420p',
+        '-profile:v', 'main',
+        '-c:a', 'aac', '-b:a', '192k',
         '-movflags', '+faststart',
         output_mp4
     ]
@@ -31,7 +36,7 @@ def fast_remux_to_mp4(input_ts, output_mp4):
     return res.returncode == 0
 
 def convert_part_task(app, input_path, output_path, rec_id):
-    """Tarea ejecutada en la cola de trabajo."""
+    """Tarea ejecutada en la cola de trabajo con control de exclusión."""
     with app.app_context():
         try:
             app.logger.info(f"[CONVERTER] Starting safe transcode for {input_path}")
@@ -50,14 +55,16 @@ def convert_part_task(app, input_path, output_path, rec_id):
 
         except Exception as e:
             app.logger.error(f"[CONVERTER] Error processing {input_path}: {e}")
+        finally:
+            with conversion_lock:
+                active_conversions.discard(input_path)
 
 def procesar_partes_inactivas(app, rec):
-    """Identifica archivos .ts que ya no tienen un proceso FFmpeg escribiendo en ellos."""
+    """Identifica archivos .ts inactivos y evita duplicar tareas de conversión."""
     save_path = "/app/config/recordings"
     prog = rec.program
     clean_title = "".join([c for c in prog.title if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
 
-    # Obtener archivos TS que FFmpeg está escribiendo activamente
     active_ts_files = set()
     for proc in psutil.process_iter(['cmdline']):
         try:
@@ -78,7 +85,10 @@ def procesar_partes_inactivas(app, rec):
             output_path = input_path.replace('.ts', '.mp4')
 
             if not os.path.exists(output_path):
-                executor.submit(convert_part_task, app, input_path, output_path, rec.id)
+                with conversion_lock:
+                    if input_path not in active_conversions:
+                        active_conversions.add(input_path)
+                        executor.submit(convert_part_task, app, input_path, output_path, rec.id)
 
 def disparar_conversion(app, rec, *args, **kwargs):
     """Alias de compatibilidad para llamadas antiguas."""
@@ -131,7 +141,10 @@ def process_recordings(app, single_program_id=None):
             os.makedirs(save_path, exist_ok=True)
 
         setting_rec = Setting.query.filter_by(key='base_url').first()
-        base_url = setting_rec.value if setting_rec else "http://localhost:8080/ace/getstream?id="
+        if setting_rec and setting_rec.value:
+            base_url = setting_rec.value.rstrip('/') + "/ace/getstream?id="
+        else:
+            base_url = "http://127.0.0.1:6878/ace/getstream?id="
 
         # 1. PARAR GRABACIONES CUYO TIEMPO EXPIRÓ
         for proc in psutil.process_iter(['name', 'cmdline']):
@@ -230,9 +243,7 @@ def process_recordings(app, single_program_id=None):
                 '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1',
                 '-reconnect_delay_max', '5', '-rw_timeout', '15000000',
                 '-i', stream_url,
-                '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
-                '-c:a', 'aac', '-b:a', '192k',
-                '-af', 'aresample=async=1', '-vsync', '1',
+                '-c', 'copy',                    # Captura limpia y directa sin re-codificar en caliente
                 '-user_agent', f'prog_id:{prog.id}', filename
             ]
 

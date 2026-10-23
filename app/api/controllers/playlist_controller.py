@@ -223,3 +223,59 @@ class OnlinePlaylist(Resource):
             mimetype="audio/x-mpegurl",
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
+
+# 1. Proxy para getstream (TS tradicional)
+@api.route('/ace/getstream')
+class StreamProxy(Resource):
+    @api.doc('proxy_ace_stream')
+    def get(self):
+        """Proxy inverso para redirigir el tráfico de streaming HTTP TS de Flask a Outpace (puerto 6878)"""
+        outpace_bind = os.environ.get('OUTPACE_BIND', '127.0.0.1:6878')
+        outpace_port = outpace_bind.split(':')[-1] if ':' in outpace_bind else '6878'
+        
+        outpace_url = f"http://127.0.0.1:{outpace_port}/ace/getstream"
+        params = request.args.to_dict()
+        
+        try:
+            req = requests.get(outpace_url, params=params, stream=True, timeout=15)
+            excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+            headers = [(name, value) for (name, value) in req.raw.headers.items() 
+                       if name.lower() not in excluded_headers]
+            
+            return Response(
+                stream_with_context(req.iter_content(chunk_size=16384)),
+                status=req.status_code,
+                headers=headers,
+                content_type=req.headers.get('content-type', 'video/mp2t')
+            )
+        except requests.exceptions.RequestException as e:
+            return Response(f"Error conectando con el motor Outpace: {str(e)}", status=502)
+
+
+# 2. Proxy dinámico para flujos HLS (.m3u8 y segmentos .ts)
+@api.route('/streams/ace/<path:hls_path>')
+class HLSStreamProxy(Resource):
+    @api.doc('proxy_ace_hls_stream')
+    def get(self, hls_path):
+        """Proxy inverso para redirigir el tráfico HLS (.m3u8 / .ts) de Flask a Outpace"""
+        outpace_bind = os.environ.get('OUTPACE_BIND', '127.0.0.1:6878')
+        outpace_port = outpace_bind.split(':')[-1] if ':' in outpace_bind else '6878'
+        
+        # Construimos la URL completa de Outpace manteniendo la ruta interna HLS intacta
+        outpace_url = f"http://127.0.0.1:{outpace_port}/streams/ace/{hls_path}"
+        params = request.args.to_dict()
+        
+        try:
+            req = requests.get(outpace_url, params=params, stream=True, timeout=15)
+            excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+            headers = [(name, value) for (name, value) in req.raw.headers.items() 
+                       if name.lower() not in excluded_headers]
+            
+            return Response(
+                stream_with_context(req.iter_content(chunk_size=16384)),
+                status=req.status_code,
+                headers=headers,
+                content_type=req.headers.get('content-type', 'application/vnd.apple.mpegurl')
+            )
+        except requests.exceptions.RequestException as e:
+            return Response(f"Error conectando con el motor Outpace (HLS): {str(e)}", status=502)

@@ -1,450 +1,77 @@
 # Configuration Reference
 
-This guide provides detailed information about configuring Acestream Scraper.
+## Where settings are stored
 
-## Contents
-- [Application Settings](#application-settings)
-- [Environment Variables](#environment-variables)
-- [Channel Status Checking](#channel-status-checking)
-- [Port Mapping](#port-mapping)
-- [Volumes](#volumes)
-- [ZeroNet Configuration](#zeronet-configuration)
-- [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
-- [Security Considerations](#security-considerations)
-- [Healthchecks](#healthchecks)
+The first-run wizard initializes the application. Runtime application settings are managed in the web UI and stored in the SQLite database. In Docker, persistent state is under `/app/config`, including `/app/config/acestream.db`; the container also reads `/app/config/config.json` when present.
 
-## Application Settings
+Important application settings:
 
-Acestream Scraper can be configured through the setup wizard or directly by editing configuration files.
-
-### Setup Wizard
-
-When first accessing the application at `http://localhost:8040`, you'll be guided through the setup process if no configuration exists:
-
-1. Configure Base URL format
-2. Set Acestream Engine URL
-3. Add source URLs to scrape
-4. Set rescrape interval
-
-### Manual Configuration
-
-Create or edit `config/config.json`:
-
-```json
-{
-    "urls": [
-        "https://example.com/url1",
-        "https://example.com/url2"
-    ],
-    "base_url": "http://localhost:6878/ace/getstream?id=",
-    "ace_engine_url": "http://localhost:6878",
-    "rescrape_interval": 24
-}
-```
-
-### Key Settings
-
-- **urls**: Array of URLs to scrape for Acestream channels
-- **base_url**: Base URL format for playlist generation
-  - `acestream://` - For players with Acestream protocol support
-  - `http://localhost:6878/ace/getstream?id=` - For local HTTP streaming
-  - `http://server-ip:acexy_port/ace/getstream?id=` - For using built-in PyAcexy proxy
-- **ace_engine_url**: URL of your Acestream Engine instance
-- **rescrape_interval**: Hours between automatic rescans of URLs
-- **checkstatus_interval**: Hours between automatic rescans of streams
-- **checkstatus_enabled**: Enable or disable Task
-
-## Environment Variables (Canonical Reference)
-
-The table below is the single canonical reference for environment variables used by the application and container. Defaults match the image; override them in your runtime as necessary.
-
-| Variable | Default | Description |
+| Setting | Default | Description |
 |---|---:|---|
-| `DOCKER_ENV` | (unset) | When present, the container uses `/app/config` for config and DB paths. |
-| `FLASK_PORT` | `8040` | Port the Flask application listens on. |
-| `FLASK_ENV` | `production` | Flask environment mode. |
-| `ENABLE_ACEXY` | `true` | Enable PyAcexy proxy. |
-| `ACEXY_LISTEN_ADDR` | `:8080` | Listen address for PyAcexy. |
-| `ACEXY_HOST` | `localhost` | Hostname/IP of the Acestream Engine PyAcexy connects to. |
-| `ACEXY_PORT` | `6878` | Port of the Acestream Engine. |
-| `ACEXY_NO_RESPONSE_TIMEOUT` | `15` | Timeout (s) for Acestream responses. |
-| `ACEXY_BUFFER_SIZE` | `10` | Buffer size (MB) for PyAcexy transfers. |
-| `ENABLE_ACESTREAM_ENGINE` | `true` | Start internal Acestream Engine instances. If `false`, entrypoint forces `CHECKSTATUS_ENABLED=false`. |
-| `ACESTREAM_HTTP_PORT` | `6878` | Main Acestream Engine HTTP port (background checker uses `6879`). |
-| `ACESTREAM_HTTP_HOST` | (uses `ACEXY_HOST`) | Engine host value; defaults to `ACEXY_HOST`. |
-| `CHECKSTATUS_ENABLED` | `true` | Controls automatic stream status checking. Entry point may override. |
-| `EXTRA_FLAGS` | (image default) | Extra flags passed to the Acestream engine. |
-| `LD_PRELOAD` | jemalloc path | Preloaded library path; image sets jemalloc by default. |
-| `MALLOC_CONF` | `dirty_decay_ms:1000,muzzy_decay_ms:1000` | jemalloc config string. |
+| `base_url` | empty | Base used to construct playlist stream URLs |
+| `rescrape_interval` | 24 hours | Period for rescanning enabled source URLs |
+| `checkstatus_interval` | 24 hours | Period for channel status checks |
+| `checkstatus_enabled` | `true` | Enables automatic status checks unless overridden by the environment |
+| `epg_refresh_interval` | 24 hours | Period for refreshing enabled EPG sources |
+| `stream_mode` | `traditional` | `traditional` or `hls` |
 
-Notes:
-- The entrypoint supports two modes: `main-only` and `both` (main + background). `background-only` is not supported.
-- If `ACEXY_HOST` points to an external host, the entrypoint disables internal engines and sets `CHECKSTATUS_ENABLED=false` because the built-in background check URL is `http://localhost:6879`.
-- `start_two_engines.sh` and `bind_remap.so` are used to remap P2P port `8621`→`8622` for the background instance to avoid collisions.
+Use the Configuration page to change these values. Add source URLs, TV channels, EPG mappings, and recording schedules through their respective pages.
 
-Acestream Scraper includes both PyAcexy and Acestream Engine for improved multi-client handling:
+## Image environment variables
 
-1. **Connection Management**: When multiple clients access the same stream, each needs a unique process ID (PID)
-2. **Automatic PID Handling**: PyAcexy automatically adds the required `pid=id` parameter to stream requests
-3. **Error Isolation**: With proper PID management, one client disconnecting won't affect others
-4. **Simplified URLs**: End users don't need to worry about adding PID parameters manually
-5. **Performance**: PyAcexy includes buffering mechanisms to improve streaming performance
+These are the main environment variables defined or consumed by the current Docker image:
 
-Without PyAcexy, you'd need to manually append `&pid={unique_id}` to each stream URL to properly handle multiple connections. When a stream ends for one client, without this parameter, it might terminate the stream for all users. Acexy transparently manages these connections, making the system more robust for multi-user environments.
+| Variable | Image default | Description |
+|---|---:|---|
+| `DOCKER_ENV` | `true` | Uses `/app/config` for config and database paths |
+| `FLASK_PORT` | `8040` | Port used by Gunicorn |
+| `TZ` | `Europe/Madrid` | Container timezone |
+| `ENABLE_TOR` | `false` | Starts the Tor service |
+| `ENABLE_WARP` | `false` | Runs WARP initialization |
+| `ENABLE_ACESTREAM_SEARCH` | `true` | Starts the bundled search engine (`6880` HTTP, `8625` P2P) |
+| `CHECKSTATUS_ENABLED` | unset | When set, overrides the stored status-check setting |
+| `WARP_LICENSE_KEY` | empty | Optional WARP license key |
+| `WG_QUICK_USERSPACE_IMPLEMENTATION` | `boringtun` | WireGuard userspace implementation |
+| `WG_THREADS` | `4` | WireGuard worker count |
 
-### ZeroNet and Other Settings
+The image also defines memory allocator variables (`LD_PRELOAD`, `MALLOC_CONF`). `entrypoint.sh` sets the Outpace bind addresses and tuning values internally; these are not presented as user-configurable application settings.
 
-| Variable | Description | Default | Notes |
-|----------|-------------|---------|-------|
-| `ENABLE_TOR` | Enable TOR for ZeroNet connections | `false` | Set to `true` to use TOR with ZeroNet |
-| `TZ` | Timezone for the container | `Europe/Madrid` | Use any valid TZ identifier |
-| `DOCKER_ENVIRONMENT` | Mark as running in Docker | `true` | Used for internal path configuration |
+The current entrypoint starts Outpace on `6878` and a checker instance on `6879`, with peer ports `8621` and `8622`. The bundled AceStream executable is used for search, not as the main Outpace stream service. Legacy variables and examples for PyAcexy are not part of the current startup configuration.
 
-### WARP Configuration
-
-Cloudflare WARP provides enhanced privacy and secure connection options:
-
-| Variable | Description | Default | Notes |
-|----------|-------------|---------|-------|
-| `ENABLE_WARP` | Enable Cloudflare WARP | `false` | Requires `NET_ADMIN` and `SYS_ADMIN` capabilities |
-| `CONTAINER_NETWORK_MODE` | Mode of network container | `host` | Modes `host` and `bridge` |
-| `WARP_LICENSE_KEY` | WARP license key | - | Optional: For WARP+ or Team accounts |
-
-### Docker Example with WARP Enabled
-
-```bash
-docker run -d \
-  -p 8040:8040 \
-  --cap-add NET_ADMIN \
-  --cap-add SYS_ADMIN \
-  --device /dev/net/tun:/dev/net/tun \
-  --sysctl net.ipv4.conf.all.src_valid_mark=1 \
-  --sysctl net.ipv4.ip_forward=1 \
-  -e ENABLE_WARP=true \
-  -e CONTAINER_NETWORK_MODE=bridge \
-  -v "${PWD}/config:/app/config" \
-  -v "${PWD}/recordings:/app/config/recordings" \
-  --name acestream-scraper \
-  visesa84/acestream-scraper-pyacexy:latest
-```
-
-### Docker Compose Example with WARP Enabled
-
-```yaml
-version: '3.8'
-
-services:
-  acestream-scraper:
-    image: visesa84/acestream-scraper-pyacexy:latest
-    container_name: acestream-scraper
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv4.ip_forward=1
-    environment:
-      - TZ=Europe/Madrid
-      - ENABLE_WARP=true
-	  - CONTAINER_NETWORK_MODE=bridge
-    ports:
-      - "8040:8040"
-    volumes:
-      - ./data/config:/app/config
-	  - ./data/recordings:/app/config/recordings
-    restart: unless-stopped
-```
-
-## Channel Status Checking
-
-The application verifies if channels are available:
-
-1. Ensure you have Acestream Engine running (built-in if ENABLE_ACESTREAM_ENGINE=true)
-2. Configure `ace_engine_url` to point to your Acestream Engine instance
-3. Use the "Check Status" buttons in the UI to verify channel availability
-
-### Status Tracking
-
-- The application maintains history of status checks
-- Status is color-coded in the interface (green = online, red = offline)
-- Error messages are displayed when a channel cannot be accessed
-
-## Port Mapping
-
-When using Docker, map these ports as needed:
+## Docker port reference
 
 | Port | Service | Notes |
-|------|---------|-------|
-| 8040 | Main web interface | Configurable via `FLASK_PORT` |
-| 8080 | Acexy web interface | Only if Acexy is enabled |
-| 6878 | Acestream HTTP API | Configurable via `ACESTREAM_HTTP_PORT` |
-| 43110 | ZeroNet web interface | Only if ZeroNet is enabled |
-| 43111 | ZeroNet transport port | Only if ZeroNet is enabled |
-| 26552 | Additional ZeroNet peer port | Only if ZeroNet is enabled |
-| 8621 | Acestream P2P port | For Acestream peer connections |
+|---:|---|---|
+| `8040` | Flask/Gunicorn | Configurable with `FLASK_PORT` |
+| `1935` | Outpace RTMP listener | Internal service port |
+| `6878` | Outpace stream listener | Main instance |
+| `6879` | Outpace checker | Internal checker instance |
+| `8621`, `8622` | Outpace peer listeners | Main and checker instances |
+| `6880` | AceStream search HTTP API | Only when search is enabled |
+| `8625` | AceStream search P2P | Only when search is enabled |
+| `43110` | ZeroNet UI | Container ZeroNet service |
+| `43111`, `26552` | ZeroNet peer ports | ZeroNet networking |
+
+Ports must be explicitly published by Docker/Compose to be reachable from the host. See the repository's Compose file for its current mapping.
 
 ## Volumes
 
-When using Docker, mount these volumes:
+Mount the container directories rather than relying on data inside the image:
 
-| Container Path | Purpose | Notes |
-|----------------|---------|-------|
-| `/app/config` | Configuration files | Contains config.json and database |
-| `/app/recordings` | Records files | Contains records assings from TV Channels EPG section |
-| `/app/ZeroNet/data` | ZeroNet data directory | Only required if using ZeroNet |
+- `/app/config`: database and application configuration
+- `/app/config/recordings`: recordings
+- `/app/ZeroNet/data`: ZeroNet data
 
-Example mount:
-```bash
-docker run -v "${PWD}/config:/app/config" -v "${PWD}/recordings:/app/config/recordings" -v "${PWD}/zeronet_data:/app/ZeroNet/data" ...
-```
+## ZeroNet
 
-## ZeroNet Configuration
+At startup, the entrypoint creates `/app/config/zeronet.conf` if it does not exist and links it into the ZeroNet installation. The default UI port is `43110`. Restrict access to the ZeroNet UI and configure allowed hosts according to your network.
 
-The application looks for a `zeronet.conf` file in the `/app/config` directory.
+## WARP and Tor
 
-### Default Configuration
+Tor is started by setting `ENABLE_TOR=true`.
 
-If no configuration file exists, this default is created:
-```ini
-[global]
-ui_ip = *
-ui_host =
- 0.0.0.0
- localhost
-ui_port = 43110
-```
+For WARP, set `ENABLE_WARP=true` and provide the Linux tunnel device, `NET_ADMIN` and `SYS_ADMIN` capabilities, plus the network sysctls required by WireGuard. See the checked-in Compose configuration and `warp-setup.sh`. Do not enable these privileges unnecessarily.
 
-### Custom Configuration
+## Reverse proxies and security
 
-Create your own `config/zeronet.conf`:
-```ini
-[global]
-ui_ip = *
-ui_host =
- 127.0.0.1
- your.domain.com
- localhost
-ui_port = 43110
-```
-
-## Running Behind a Reverse Proxy
-
-The application includes proper headers handling for running behind a reverse proxy:
-
-- Automatic handling of SSL/TLS termination
-- Correct handling of X-Forwarded-Proto and X-Forwarded-Host headers
-- Works with nginx, Apache, Traefik or other reverse proxies
-
-### Nginx Example
-
-```nginx
-server {
-    listen 80;
-    server_name acestream.example.com;
-
-    # Permanent redirect to HTTPS
-    return 301 https://$host$request_uri;
-}
-
-upstream flask_app {
-    server IP:8040;
-}
-
-upstream acestream_engine {
-    server IP:8080;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name acestream.example.com;
-
-    # Certificates SSL
-    ssl_certificate /etc/letsencrypt/live/acestream.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/acestream.example.com/privkey.pem;
-
-    # ----------------------------------------------------
-	# 1. Basic Authentication
-    # ----------------------------------------------------
-    auth_basic "Restricted Content";
-    auth_basic_user_file /etc/nginx/.htpasswd;
-
-    # ----------------------------------------------------
-    #2. Forward Authorization to the backend
-    # ----------------------------------------------------
-    proxy_set_header Authorization $http_authorization;
-
-    # ----------------------------------------------------
-    # 3. PyAcexy App (8080)
-    # ----------------------------------------------------
-    location ^~ /ace {
-        proxy_pass http://IP:8080;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-    }
-
-    # ----------------------------------------------------
-    # 4. Flask App (8040)
-    # ----------------------------------------------------
-    location / {
-        proxy_pass http://IP:8040;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header Authorization $http_authorization;
-    }
-}
-```
-
-### Traefik Example
-
-```traefik
-labels:
-  - "traefik.enable=true"
-
-  # ----------------------------------------------------
-  # 1. HTTP → HTTPS REDIRECT
-  # ----------------------------------------------------
-  - "traefik.http.routers.scraper-redirect.entrypoints=web"
-  - "traefik.http.routers.scraper-redirect.rule=Host(`acestream.example.com`)"
-  - "traefik.http.routers.scraper-redirect.middlewares=scraper-https"
-  - "traefik.http.middlewares.scraper-https.redirectscheme.scheme=https"
-
-  # ----------------------------------------------------
-  #2. MAIN ROUTER (Flask - port 8040)
-  # ----------------------------------------------------
-  - "traefik.http.routers.scraper-app.rule=Host(`acestream.example.com`)"
-  - "traefik.http.routers.scraper-app.entrypoints=websecure"
-  - "traefik.http.routers.scraper-app.tls=true"
-  - "traefik.http.routers.scraper-app.service=scraper-app-service"
-  - "traefik.http.services.scraper-app-service.loadbalancer.server.port=8040"
-
-  # ----------------------------------------------------
-  # 3. PYACEXY ROUTER (port 8080)
-  # HIGH PRIORITY to intercept /ace
-  # ----------------------------------------------------
-  - "traefik.http.routers.scraper-ace.rule=Host(`acestream.example.com`) && PathPrefix(`/ace`)"
-  - "traefik.http.routers.scraper-ace.entrypoints=websecure"
-  - "traefik.http.routers.scraper-ace.tls=true"
-  - "traefik.http.routers.scraper-ace.priority=100"
-  - "traefik.http.routers.scraper-ace.service=scraper-ace-service"
-  - "traefik.http.services.scraper-ace-service.loadbalancer.server.port=8080"
-
-  # ----------------------------------------------------
-  # 4. BASIC AUTH
-  # ----------------------------------------------------
-  - "traefik.http.middlewares.scraper-auth.basicauth.users=usuario:$$apr1$$H64pzS7X$$h89SzhS..."
-
-  # Apply BasicAuth to both routers
-  - "traefik.http.routers.scraper-app.middlewares=scraper-auth"
-  - "traefik.http.routers.scraper-ace.middlewares=scraper-auth"
-
-  # ----------------------------------------------------
-  # 5. CORRECT HEADERS FOR FLASK
-  # ----------------------------------------------------
-  - "traefik.http.middlewares.scraper-headers.headers.customrequestheaders.X-Forwarded-Host=acestream.example.com"
-  - "traefik.http.routers.scraper-app.middlewares=scraper-auth,scraper-headers"
-  - "traefik.http.routers.scraper-ace.middlewares=scraper-auth,scraper-headers"
-```
-
-### Apache VirtualHost Example
-
-```apache
-  # ----------------------------------------------------
-  #Activate these modules
-  # ----------------------------------------------------
-	a2enmod ssl
-	a2enmod proxy
-	a2enmod proxy_http
-	a2enmod headers
-	a2enmod rewrite
-	a2enmod auth_basic
-
-<VirtualHost *:80>
-    ServerName acestream.example.com
-    RewriteEngine On
-    RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [R=301,L]
-</VirtualHost>
-
-<VirtualHost *:443>
-    ServerName acestream.example.com
-
-    # SSL
-    SSLEngine on
-    SSLCertificateFile /etc/letsencrypt/live/acestream.example.com/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/acestream.example.com/privkey.pem
-
-    # ----------------------------------------------------
-    # 1. BASIC AUTH
-    # ----------------------------------------------------
-    <Location />
-        AuthType Basic
-        AuthName "Restricted Content"
-        AuthUserFile /etc/apache2/.htpasswd
-        Require valid-user
-    </Location>
-
-    # ----------------------------------------------------
-    # 2. Resend Authorization to backend
-    # ----------------------------------------------------
-    RequestHeader set Authorization "%{Authorization}e" env=REDIRECT_AUTHORIZATION
-
-    # ----------------------------------------------------
-    # 3. PyAcexy App (8080)
-    # ----------------------------------------------------
-    ProxyPass        /ace http://IP:8080/ace
-    ProxyPassReverse /ace http://IP:8080/ace
-
-    # ----------------------------------------------------
-    # 4. Flask App (8040)
-    # ----------------------------------------------------
-    ProxyPass        / http://IP:8040/
-    ProxyPassReverse / http://IP:8040/
-
-    # ----------------------------------------------------
-    # 5. Cabeceras Forwarded
-    # ----------------------------------------------------
-    ProxyPreserveHost On
-    RequestHeader set X-Forwarded-Proto "https"
-    RequestHeader set X-Forwarded-Host "%{HTTP_HOST}s"
-
-</VirtualHost>
-```
-
-## Security Considerations
-
-- Add your domain(s) to `ui_host` in ZeroNet config for public access
-- Always include `localhost` in `ui_host` for local access
-- Consider using a reverse proxy with SSL/TLS for secure access
-- Configure a Custom Location in the Proxy to route the /ace path to port 8080. The URL generator utilizes Access List from Reverse Proxy to inject credentials and the domain into the streaming links
-- Be aware of copyright and legal considerations when sharing playlists
-
-## Healthchecks
-
-The container includes comprehensive health checks:
-
-- Main application health check at `/health` endpoint
-- Acexy health check (if enabled)
-- Acestream Engine health check (if enabled)
-- Automatic monitoring of internal services
-- Graceful handling of service dependencies
-
-### Docker Health Check
-
-The Docker container is configured with a health check that verifies all services are running correctly:
-
-```yaml
-healthcheck:
-  test: ["CMD", "/app/healthcheck.sh"]
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 60s
-```
-
-You can check the health status with: `docker inspect --format='{{.State.Health.Status}}' acestream-scraper
+The Flask app uses `ProxyFix` for forwarded host/protocol/client headers. Only trust forwarded headers from a reverse proxy you control. Keep the UI/API private or place them behind a properly configured access-control layer; do not assume that publishing the container ports provides authentication.

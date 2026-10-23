@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   acestream:
     platform: linux/arm/v7
@@ -16,34 +18,24 @@ services:
     security_opt:
       - seccomp:unconfined
     environment:
+      - TZ=Europe/Madrid
       - ENABLE_TOR=false
-      - ENABLE_ACEXY=true
-      - ENABLE_ACESTREAM_ENGINE=true
-      - CHECKSTATUS_ENABLED=true
       - WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard-go
       - WG_THREADS=4
       - ENABLE_WARP=false
       - CONTAINER_NETWORK_MODE=bridge
       - WARP_LICENSE_KEY=
-      - ACESTREAM_HTTP_PORT=6878
-      - ACESTREAM_HTTP_HOST=ACEXY_HOST
       - FLASK_PORT=8040
-      - ACEXY_LISTEN_ADDR=:8080
-      - ACEXY_PORT=6878
-      - ACEXY_HOST=localhost
-      - ALLOW_REMOTE_ACCESS=no
-      - ACEXY_BUFFER_SIZE=10
-      - EXTRA_FLAGS=--cache-dir /tmp --cache-limit 2 --log-stderr --log-stderr-level error --max-connections 300 --max-peers 50 --core-dlrate-helper 0 --stats-report-interval 10 --live-cache-type memory --live-cache-size 209715200
-      - TZ=Europe/Madrid
     ports:
-      - "43110:43110"
-      - "43111:43111"
-      - "26552:26552"
-      - "6878:6878"
-      - "8040:8040"
-      - "8080:8080"
-      - "8621:8621/tcp"
-      - "8621:8621/udp"
+      - "1935:1935"  # Outpace RTMP Port
+      - "6878:6878"  # Outpace Port
+      - "8040:8040"  # Flask application
+      - "8621:8621"  # Outpace P2P Port
+      - "8622:8622"  # Outpace P2P Port
+      - "8625:8625"  # Acestream Search P2P Port
+      - "43110:43110"  # ZeroNet UI
+      - "43111:43111"  # ZeroNet peer
+      - "26552:26552"  # ZeroNet peer
     volumes:
       - ./Docker:/app/ZeroNet/data
       - ./Docker:/app/config
