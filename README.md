@@ -94,6 +94,8 @@ Frequently used image environment variables:
 | `TZ` | `Europe/Madrid` | Container timezone |
 | `ENABLE_TOR` | `false` | Start Tor for ZeroNet use |
 | `ENABLE_WARP` | `false` | Initialize Cloudflare WARP; requires tunnel/network permissions |
+| `WG_QUICK_USERSPACE_IMPLEMENTATION` | `boringtun` | Use the boringtun module to process encrypted VPN traffic |
+| `WG_THREADS` | `4` | Number of CPU threads in parallel for boringtun |
 | `ENABLE_ACESTREAM_SEARCH` | `true` | Start the bundled AceStream search service on port `6880` (P2P port `8625`) |
 | `CHECKSTATUS_ENABLED` | application setting | Enable automatic stream checks |
 
