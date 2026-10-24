@@ -459,11 +459,13 @@ async function updateChannel() {
             
             // Close the modal
             const modalEl = document.getElementById('editTVChannelModal');
-			const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-			modal.hide();
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.hide();
             
-            // Reload channel data
-            loadChannelData();
+            // Recargar la página completa para limpiar backdrops y estados de Bootstrap
+            setTimeout(() => {
+                location.reload();
+            }, 600); // Breve retardo para que el usuario alcance a ver la alerta de éxito
         } else {
             const error = await response.json();
             throw new Error(error.message || 'Failed to update TV channel');

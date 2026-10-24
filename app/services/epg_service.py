@@ -761,9 +761,13 @@ class EPGService:
             if best_mapping.epg_channel_id in self.epg_data:
                 epg_data = self.epg_data[best_mapping.epg_channel_id]
                 updates = self._apply_epg_data(channel, epg_data)
-                if any(updates):
+                tvg_id_upd, tvg_name_upd, logo_upd = updates
+                was_updated = any(updates)
+                
+                if was_updated:
                     logger.info(f"Channel '{channel.name}' matched pattern '{best_mapping.search_pattern}', applied EPG data from channel '{best_mapping.epg_channel_id}'")
-                return updates
+                
+                return (was_updated, tvg_id_upd, tvg_name_upd, logo_upd)
             else:
                 logger.warning(f"EPG channel ID '{best_mapping.epg_channel_id}' not found for pattern '{best_mapping.search_pattern}'")
         
