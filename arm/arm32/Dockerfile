@@ -74,7 +74,7 @@ FROM --platform=linux/arm/v7 python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with ZeroNet support" \
-      version="2.0.0"
+      version="2.0.1"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -161,15 +161,6 @@ COPY --chmod=0755 arm/arm32/entrypoint.sh ./
 COPY --chmod=0755 healthcheck.sh warp-setup.sh ./
 COPY --chmod=0755 arm/arm32/wgcf /usr/local/bin/wgcf
 
-# 4. Instalación del motor Acestream
-COPY arm/arm32/ace-armeabi-v7a.zip arm/arm32/system.zip /
-RUN unzip /ace-armeabi-v7a.zip -d /acestream && \
-    unzip /system.zip -d / && \
-    rm /ace-armeabi-v7a.zip /system.zip && \
-    chmod -R +x /system/bin /acestream/python/bin
-
-ADD arm/arm32/main.py arm/arm32/dnsproxyd.py arm/arm32/app_bridge.py /acestream/
-
 # Variables de entorno Acestream
 ENV DOCKER_ENV=true
 ENV TZ='Europe/Madrid'
@@ -177,7 +168,6 @@ ENV ENABLE_TOR=false
 ENV WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
 ENV WG_THREADS=4
 ENV ENABLE_WARP=false
-ENV ENABLE_ACESTREAM_SEARCH=false
 ENV CONTAINER_NETWORK_MODE=host
 ENV WARP_LICENSE_KEY=
 ENV FLASK_PORT=8040

@@ -398,7 +398,8 @@ function editChannel() {
     }
     
     // Show the modal
-    const modal = new bootstrap.Modal(document.getElementById('editTVChannelModal'));
+    const modalEl = document.getElementById('editTVChannelModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
 }
 
@@ -457,8 +458,9 @@ async function updateChannel() {
             showAlert('success', 'TV channel updated successfully');
             
             // Close the modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('editTVChannelModal'));
-            modal.hide();
+            const modalEl = document.getElementById('editTVChannelModal');
+			const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+			modal.hide();
             
             // Reload channel data
             loadChannelData();
@@ -805,7 +807,7 @@ function showAssignModal() {
     loadAvailableAcestreams();
     
     // Show the modal
-    const bootstrapModal = new bootstrap.Modal(modal);
+    const bootstrapModal = bootstrap.Modal.getOrCreateInstance(modal);
     bootstrapModal.show();
 }
 

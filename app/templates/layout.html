@@ -131,11 +131,13 @@
                             <i class="bi bi-record-circle"></i> Recordings
                         </a>
                     </li>
+					{% if enable_acestream_search %}
                     <li class="nav-item">
                         <a class="nav-link d-flex align-items-center gap-1 {% block search_active %}{% endblock %}" href="/search">
                             <i class="bi bi-search"></i> Search
                         </a>
                     </li>
+					{% endif %}
                     <li class="nav-item">
                         <a class="nav-link d-flex align-items-center gap-1 {% block config_active %}{% endblock %}" href="/config">
                             <i class="bi bi-gear"></i> Config

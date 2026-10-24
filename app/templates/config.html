@@ -32,7 +32,9 @@
                         <select class="form-select bg-body-tertiary border-0 rounded-3" id="urlTypeSelect">
                             <option value="regular" selected>Regular HTTP</option>
                             <option value="zeronet">ZeroNet</option>
+							{% if enable_acestream_search %}
                             <option value="acestream_search">Acestream Search</option>
+							{% endif %}
                         </select>
                     </div>
                     <div class="col-12 col-md-2">

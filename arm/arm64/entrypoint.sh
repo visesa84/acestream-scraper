@@ -113,15 +113,7 @@ OUTPACE_CHECK_STREAM_PID=$!
 sleep 3
 echo "Outpace engine startup log: $LOG_DIR/outpace.log"
 
-export ENABLE_ACESTREAM_SEARCH=${ENABLE_ACESTREAM_SEARCH:-false}
-
-if [ "$ENABLE_ACESTREAM_SEARCH" = "true" ]; then
-	/opt/acestream/start-engine --client-console --http-port 6880 --port 8625 >> "$LOG_DIR/acestream.log" 2>&1 & 
-	ACESTREAM_SEARCH_PID=$!	
-
-	sleep 3
-	echo "Acestream engine startup log: $LOG_DIR/acestream.log"
-fi
+export ENABLE_ACESTREAM_SEARCH=false
 
 # Start ZeroNet in the background
 cd /app/ZeroNet

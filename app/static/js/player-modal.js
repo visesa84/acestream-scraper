@@ -26,23 +26,25 @@ document.head.appendChild(style);
 
 async function getBaseUrl() {
     try {
-        // Obtenemos el origen actual exacto (incluyendo el protocolo, la IP/dominio y el puerto dinámico de Flask)
         const currentOrigin = window.location.origin;
         
-        // Verificamos si hay una URL base configurada en el backend que el usuario haya querido forzar
         const response = await fetch('/api/config/base_url');
         const data = await response.json();
         
+        // Verificamos que exista y que sea una URL HTTP/HTTPS válida
         if (data.base_url && data.base_url.trim() !== '') {
             let customBase = data.base_url.trim().replace(/\/$/, '');
-            // Si la base configurada no incluye la ruta del stream, la añadimos según el modo
-            if (!customBase.includes('/ace/getstream') && !customBase.includes('/streams/ace/')) {
-                return `${customBase}/ace/getstream?id=`;
+            
+            // Si por lo que sea hay un valor antiguo como 'acestream://', lo descartamos
+            if (customBase.startsWith('http://') || customBase.startsWith('https://')) {
+                if (!customBase.includes('/ace/getstream') && !customBase.includes('/streams/ace/')) {
+                    return `${customBase}/ace/getstream?id=`;
+                }
+                return customBase.endsWith('=') ? customBase : `${customBase}?id=`;
             }
-            return customBase.endsWith('=') ? customBase : `${customBase}?id=`;
         }
 
-        // Por defecto, utilizamos siempre el origen actual dinámico
+        // Por defecto (si está vacío o contenía basura como 'acestream://'), usa la IP/dominio actual
         return `${currentOrigin}/ace/getstream?id=`;
     } catch (error) {
         console.error('Error fetching base URL, falling back to window.location.origin:', error);

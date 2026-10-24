@@ -15,7 +15,7 @@ class SettingsRepository:
     SETUP_COMPLETED = 'setup_completed'
     
     # Add constants for default values
-    DEFAULT_BASE_URL = 'acestream://'
+    DEFAULT_BASE_URL = ''
     DEFAULT_ACE_ENGINE_URL = 'http://localhost:6878'
     DEFAULT_RESCRAPE_INTERVAL = '24'
     
@@ -118,7 +118,7 @@ class SettingsRepository:
         }
         
         for key, value in default_settings.items():
-            if not self.get_setting(key):
+            if Setting.query.filter_by(key=key).first() is None:
                 self.set_setting(key, value)
                 
     def import_from_json_config(self, config_data):
