@@ -222,14 +222,25 @@ def proxy_acestream():
     
     try:
         req = requests.get(target_url, stream=True, timeout=15)
+        
+        def generate():
+            try:
+                for chunk in req.iter_content(chunk_size=1024*64):
+                    if chunk:
+                        yield chunk
+            except Exception as stream_err:
+                # Capturamos el timeout o pérdida de peers de forma silenciosa/controlada
+                logger.warning(f"AceStream stream disconnected or timed out (no peers?): {stream_err}")
+                return
+
         return Response(
-            stream_with_context(req.iter_content(chunk_size=1024*64)),
+            stream_with_context(generate()),
             status=req.status_code,
             content_type=req.headers.get('content-type', 'video/mp2t')
         )
     except Exception as e:
-        logger.error(f"Error en proxy acestream: {e}")
-        return f"Error connecting to engine: {e}", 502
+        logger.error(f"Initial error in Outpace proxy: {e}")
+        return f"Error connecting to Outpace engine: {e}", 502
 
 @bp.route('/streams/ace/cid:<path:cid_path>')
 def proxy_outpace_hls(cid_path):
@@ -241,11 +252,21 @@ def proxy_outpace_hls(cid_path):
     
     try:
         req = requests.get(target_url, stream=True, timeout=60)
+        
+        def generate():
+            try:
+                for chunk in req.iter_content(chunk_size=1024*64):
+                    if chunk:
+                        yield chunk
+            except Exception as stream_err:
+                logger.warning(f"Outpace HLS stream disconnected or timed out: {stream_err}")
+                return
+
         return Response(
-            stream_with_context(req.iter_content(chunk_size=1024*64)),
+            stream_with_context(generate()),
             status=req.status_code,
             content_type=req.headers.get('content-type', 'application/vnd.apple.mpegurl')
         )
     except Exception as e:
-        logger.error(f"Error en proxy HLS outpace: {e}")
-        return f"Error connecting to HLS engine: {e}", 502
+        logger.error(f"Initial error in HLS Outspace proxy: {e}")
+        return f"Error connecting to HLS Outpace engine: {e}", 502

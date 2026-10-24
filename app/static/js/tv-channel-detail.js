@@ -299,6 +299,13 @@ function updateAcestreamsTable() {
     const tableBody = document.getElementById('acestreamsTableBody');
     if (!tableBody) return;
     
+	// Actualizar el contador de streams asignados
+    const countBadge = document.getElementById('assignedStreamsCount');
+    if (countBadge) {
+        const count = channelState.acestreams.length;
+        countBadge.textContent = `${count} stream${count === 1 ? '' : 's'}`;
+    }
+	
     if (channelState.acestreams.length === 0) {
         tableBody.innerHTML = `
             <tr>
