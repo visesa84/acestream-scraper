@@ -91,10 +91,10 @@ RUN chmod +x /usr/local/bin/outpace
 # Instalar dependencias del sistema + herramientas de WireGuard
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl gnupg gcc python3-dev build-essential \
-    tor git lsb-release apt-transport-https ca-certificates \
+    tor ca-certificates \
     wireguard-tools iproute2 ffmpeg openresolv unzip binutils \
     libssl-dev libffi-dev logrotate cron \
-    libopenblas-dev libsecp256k1-dev libtool autoconf automake pkg-config \
+    libsecp256k1-dev libtool autoconf automake pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Configuración de TOR
@@ -105,7 +105,7 @@ RUN echo "ControlPort 9051" >> /etc/tor/torrc && \
 RUN pip install --no-cache-dir \
     "msgpack-python" "gevent==22.10.2" "PySocks" "gevent-websocket" \
     "python-bitcoinlib" "bencode.py" "merkletools" "pysha3" \
-    "cgi-tools" "urllib3<2.0.0" "rich" "requests" "pyaes" \
+    "cgi-tools" "urllib3<2.0.0" "rich" "pyaes" \
     "coincurve" "base58" "defusedxml" "rsa" "psutil"
 
 # Descargar e instalar ZeroNet

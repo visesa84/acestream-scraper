@@ -91,10 +91,10 @@ RUN chmod +x /usr/local/bin/outpace
 # Instalar dependencias del sistema + herramientas de WireGuard
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl gnupg gcc python3-dev build-essential \
-    tor git lsb-release apt-transport-https ca-certificates \
+    tor ca-certificates \
     wireguard-tools iproute2 ffmpeg \
 	openresolv unzip binutils \
-	gcc libssl-dev libffi-dev logrotate cron \
+	libssl-dev libffi-dev logrotate cron \
 	libsecp256k1-dev libtool autoconf automake pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
@@ -130,7 +130,7 @@ RUN COINCURVE_IGNORE_SYSTEM_LIB=0 \
 RUN pip install --no-cache-dir \
     --extra-index-url https://www.piwheels.org/simple \
     --prefer-binary \
-    "psutil" "pysha3" "gevent-websocket" "msgpack-python" "PySocks" \
+    "psutil" "gevent-websocket" "msgpack-python" "PySocks" \
     "python-bitcoinlib" "bencode.py" "merkletools" "cgi-tools" \
     "urllib3<2.0.0" "rich" "requests" "pyaes" "base58" "defusedxml" "rsa"
 
