@@ -49,7 +49,6 @@ class PlaylistService:
 
         parsed = urlparse(base_url)
 
-        # Forzar http si el host es local, independientemente de cómo lo interprete request.host_url
         scheme = parsed.scheme
         if is_local_host(parsed.hostname or ''):
             scheme = 'http'
@@ -71,16 +70,17 @@ class PlaylistService:
             return f"{host}/ace/getstream?id={channel_id}"
 
     def _get_channels(self, search_term: str = None):
-        """Retrieve channels from the repository with optional search term."""
+        """Retrieve active and online channels from the repository with optional search term."""
+        query = self.channel_repository.model.query.filter(
+            (self.channel_repository.model.status == 'active') &
+            (self.channel_repository.model.is_online.is_(True))
+        )
         if search_term:
-            return self.channel_repository.model.query.filter(
-                (self.channel_repository.model.status == 'active') &
-                (self.channel_repository.model.name.ilike(f'%{search_term}%'))
-            ).all()
-        return self.channel_repository.get_active()
+            query = query.filter(self.channel_repository.model.name.ilike(f'%{search_term}%'))
+        return query.all()
 
     def generate_playlist(self, search_term=None, base_url=None):
-        """Generate M3U playlist with channels."""
+        """Generate M3U playlist with online channels."""
         playlist_lines = ['#EXTM3U']
         
         channels = self._get_channels(search_term)
@@ -120,7 +120,7 @@ class PlaylistService:
         return '\n'.join(playlist_lines)
     
     def generate_tv_channels_playlist(self, search_term=None, favorites_only=False, base_url=None):
-        """Generate M3U playlist with TV channels using all their acestreams."""
+        """Generate M3U playlist with TV channels using only online acestreams."""
         playlist_lines = ['#EXTM3U']
         
         channels, total, _ = self.tv_channel_repository.filter_channels(
@@ -134,13 +134,13 @@ class PlaylistService:
             key=lambda c: (c.channel_number is None, c.channel_number or 0, c.name.lower())
         )
         
-        name_counts = {}
         local_id = 0
         
         for tv_channel in sorted_channels:
             acestreams = AcestreamChannel.query.filter(
                 AcestreamChannel.tv_channel_id == tv_channel.id,
-                AcestreamChannel.status == 'active'
+                AcestreamChannel.status == 'active',
+                AcestreamChannel.is_online.is_(True)
             ).all()
             
             if not acestreams:
@@ -196,7 +196,7 @@ class PlaylistService:
         return '\n'.join(playlist_lines)
 
     def generate_epg_xml(self, search_term=None, favorites_only=False, base_url=None):
-        """Generate XML EPG guide for channels with EPG data and associated acestreams."""
+        """Generate XML EPG guide for channels with online associated acestreams."""
         from datetime import datetime, timedelta
         from app.repositories.epg_channel_repository import EPGChannelRepository
         from app.repositories.epg_program_repository import EPGProgramRepository
@@ -227,12 +227,19 @@ class PlaylistService:
         name_counts = {}
         
         for tv_channel in sorted_channels:
-            if not tv_channel.epg_id or tv_channel.acestream_channels.count() == 0:
+            online_count = AcestreamChannel.query.filter(
+                AcestreamChannel.tv_channel_id == tv_channel.id,
+                AcestreamChannel.status == 'active',
+                AcestreamChannel.is_online.is_(True)
+            ).count()
+
+            if not tv_channel.epg_id or online_count == 0:
                 continue
                 
             acestreams = AcestreamChannel.query.filter(
                 AcestreamChannel.tv_channel_id == tv_channel.id,
-                AcestreamChannel.status == 'active'
+                AcestreamChannel.status == 'active',
+                AcestreamChannel.is_online.is_(True)
             ).all()
             if not acestreams:
                 continue
@@ -345,7 +352,7 @@ class PlaylistService:
         return '\n'.join(xml_lines)
     
     def generate_all_streams_playlist(self, search_term=None, include_unassigned=True, base_url=None):
-        """Generate M3U playlist with all acestreams."""
+        """Generate M3U playlist with all online acestreams."""
         playlist_lines = ['#EXTM3U']
         local_id = 0
         name_counts = {}
@@ -365,7 +372,8 @@ class PlaylistService:
         for tv_channel in sorted_channels:
             acestreams = AcestreamChannel.query.filter(
                 AcestreamChannel.tv_channel_id == tv_channel.id,
-                AcestreamChannel.status == 'active'
+                AcestreamChannel.status == 'active',
+                AcestreamChannel.is_online.is_(True)
             ).all()
             if not acestreams:
                 continue
@@ -436,7 +444,8 @@ class PlaylistService:
         if include_unassigned:
             unassigned_query = AcestreamChannel.query.filter(
                 AcestreamChannel.tv_channel_id == None,
-                AcestreamChannel.status == 'active'
+                AcestreamChannel.status == 'active',
+                AcestreamChannel.is_online.is_(True)
             )
             if search_term:
                 unassigned_query = unassigned_query.filter(
@@ -542,6 +551,7 @@ class PlaylistService:
         return '\n'.join(playlist_lines)
         
     def generate_m3u_with_epg(self, base_url=None, search_term=None, favorites_only=False):
+        """Generate M3U playlist with EPG linking only online acestreams."""
         user, password = self.get_basic_auth_credentials()
 
         if user and password and base_url:
@@ -567,7 +577,8 @@ class PlaylistService:
         for tv_channel in sorted_channels:
             acestreams = AcestreamChannel.query.filter(
                 AcestreamChannel.tv_channel_id == tv_channel.id, 
-                AcestreamChannel.status == 'active'
+                AcestreamChannel.status == 'active',
+                AcestreamChannel.is_online.is_(True)
             ).all()
             
             if not acestreams: continue

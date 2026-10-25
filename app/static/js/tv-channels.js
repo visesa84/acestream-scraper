@@ -452,18 +452,6 @@ function downloadTVChannelsPlaylist(refresh = false) {
     window.location.href = url;
 }
 
-function downloadAllStreamsPlaylist() {
-    const urlInput = document.getElementById('allStreamsPlaylistUrl');
-    if (!urlInput) return;
-    window.location.href = urlInput.value;
-}
-
-function downloadOnlinePlaylist() {
-    const urlInput = document.getElementById('onlinePlaylistUrl');
-    if (!urlInput) return;
-    window.location.href = urlInput.value;
-}
-
 function toggleAllFavorites(checked) {
     const favoritesFilter = document.getElementById('favoritesOnlyFilter');
     if (favoritesFilter) favoritesFilter.checked = checked;

@@ -253,7 +253,7 @@ function updateChannelList(channels) {
                 ${formatLocalDate(channel.last_checked || channel.last_processed)}
             </td>
             <!-- Columna 5: Acciones -->
-            <td>
+            <td class="text-end">
                 <div class="btn-group">
                     <button class="btn btn-sm ${isActive ? 'btn-outline-secondary' : 'btn-secondary'}" 
                             onclick="toggleChannelStatus('${channel.id}', '${channel.status}')" 
