@@ -125,15 +125,21 @@ class ScraperService:
                     
                 filtered_links.append((channel_id, channel_name, metadata))
 
-            current_channels = set(channel_id for channel_id, _, _ in filtered_links)
             existing_channels = set(
                 ch.id for ch in self.channel_repository.get_by_source(url)
             )
             
-            # Remove old channels
-            channels_to_remove = existing_channels - current_channels
-            for cid in channels_to_remove:
-                self.channel_repository.delete(cid)
+            # Si la búsqueda devuelve 0 resultados (por ejemplo, por un timeout o caída del motor),
+            # no borramos los canales existentes para evitar vaciar la tabla por error.
+            if not filtered_links and existing_channels:
+                logger.warning(f"[Scraper] Received 0 links for URL '{url}' but found {len(existing_channels)} existing channels. Skipping deletion safeguard to prevent data loss.")
+            else:
+                current_channels = set(channel_id for channel_id, _, _ in filtered_links)
+                
+                # Remove old channels only if we got a valid response or empty on purpose
+                channels_to_remove = existing_channels - current_channels
+                for cid in channels_to_remove:
+                    self.channel_repository.delete(cid)
             
             # Add/update new channels
             for channel_id, channel_name, metadata in filtered_links:

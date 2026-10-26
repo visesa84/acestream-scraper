@@ -230,7 +230,7 @@ def proxy_acestream():
                         yield chunk
             except Exception as stream_err:
                 # Capturamos el timeout o pérdida de peers de forma silenciosa/controlada
-                logger.warning(f"AceStream stream disconnected or timed out (no peers?): {stream_err}")
+                logger.warning(f"Outpace stream disconnected or timed out (no peers?): {stream_err}")
                 return
 
         return Response(
