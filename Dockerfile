@@ -10,7 +10,7 @@ RUN cargo install --path boringtun-cli
 
 # --- STAGE 1: Descarga de Outpace desde GitHub usando la misma lógica Python ---
 FROM python:3.10-slim AS builder-outpace
-RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip
+RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip jq
 
 RUN echo "import platform" > /tmp/download.py && \
     echo "import urllib.request" >> /tmp/download.py && \
@@ -66,12 +66,34 @@ RUN echo "import platform" > /tmp/download.py && \
 
 RUN python3 /tmp/download.py && rm /tmp/download.py
 
-# --- STAGE 2: Imagen Base con Dependencias y Binarios ---
+# --- STAGE 2: Descarga del binario precompilado de Kubo desde GitHub ---
+FROM builder-outpace AS builder-kubo
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN set -eu; \
+    release="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: Acestream-Scraper-Client' https://api.github.com/repos/ipfs/kubo/releases/latest)"; \
+    tag="$(printf '%s' "$release" | jq -er '.tag_name')"; \
+    target_arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$target_arch" in \
+        amd64|arm64) \
+            asset_name="kubo_${tag}_linux-${target_arch}.tar.gz"; \
+            download_url="$(printf '%s' "$release" | jq -er --arg name "$asset_name" '.assets[] | select(.name == $name) | .browser_download_url')"; \
+            curl -fsSL "$download_url" -o /tmp/kubo.tar.gz; \
+            tar -xzf /tmp/kubo.tar.gz -C /tmp kubo/ipfs; \
+            install -m 755 /tmp/kubo/ipfs /usr/local/bin/ipfs; \
+            ;; \
+        *) \
+            echo "No prebuilt Kubo binary for ${target_arch}; use arm/arm32/Dockerfile for ARMv7." >&2; \
+            exit 1; \
+            ;; \
+    esac
+
+# --- STAGE 3: Imagen Base con Dependencias y Binarios ---
 FROM python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.1.1"
+      version="2.2"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -87,6 +109,9 @@ RUN echo '#!/bin/bash\n/usr/local/bin/boringtun-real --disable-drop-privileges "
 # Copiamos el binario de Outpace descargado desde GitHub
 COPY --from=builder-outpace /usr/local/bin/outpace /usr/local/bin/outpace
 RUN chmod +x /usr/local/bin/outpace
+
+# Copiamos el binario de Kubo descargado para la arquitectura de la imagen
+COPY --from=builder-kubo /usr/local/bin/ipfs /usr/local/bin/ipfs
 
 # Instalar dependencias del sistema necesarias (incluyendo ffmpeg para procesamiento de streams/HLS)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -160,16 +185,17 @@ ENV WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
 ENV WG_THREADS=4
 ENV ENABLE_WARP=false
 ENV ENABLE_ACESTREAM_SEARCH=true
+ENV ENABLE_IPFS=true
 ENV CONTAINER_NETWORK_MODE=host
 ENV WARP_LICENSE_KEY=
 ENV FLASK_PORT=8040
 
-# --- STAGE 3: Imagen Final de la Aplicación ---
+# --- STAGE 4: Imagen Final de la Aplicación ---
 FROM base
 WORKDIR /app
 
 LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.1.1"
+      version="2.2"
 
 # Copiar archivos de la aplicación y scripts de control
 COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh

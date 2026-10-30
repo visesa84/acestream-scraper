@@ -155,6 +155,10 @@ async function loadSystemTasks() {
         // Obtenemos los campos de Outpace inyectados en stats_controller.py
         const outpaceVersion = data.outpace_version || 'N/A';
         const updateAvailable = data.outpace_update_available === true;
+        const ipfsEnabled = data.ipfs_enabled === true;
+        const ipfsRunning = data.ipfs_running === true;
+        const ipfsVersion = data.ipfs_version || 'N/A';
+        const ipfsUpdateAvailable = data.ipfs_update_available === true;
 
         let updateButtonHtml = '';
         if (updateAvailable) {
@@ -164,6 +168,12 @@ async function loadSystemTasks() {
                 </button>
             `;
         }
+
+        const ipfsUpdateButtonHtml = ipfsUpdateAvailable ? `
+            <button class="btn btn-sm btn-outline-warning rounded-pill px-3" onclick="updateKuboEngine()">
+                <i class="bi bi-arrow-up-circle me-1"></i> Update
+            </button>
+        ` : '';
 
         tasksTable.innerHTML = `
             <tr>
@@ -178,6 +188,22 @@ async function loadSystemTasks() {
                     ${updateButtonHtml}
                 </td>
             </tr>
+            ${ipfsEnabled ? `
+            <tr>
+                <td>
+                    <div class="fw-semibold text-dark">IPFS (Kubo)</div>
+                    <small class="text-muted">Version: <span class="font-monospace">${ipfsVersion}</span></small>
+                </td>
+                <td>
+                    <span class="badge ${ipfsRunning ? 'bg-success' : 'bg-secondary'} rounded-pill px-3">
+                        ${ipfsRunning ? 'RUNNING' : 'STOPPED'}
+                    </span>
+                </td>
+                <td class="text-end">
+                    ${ipfsUpdateButtonHtml}
+                </td>
+            </tr>
+            ` : ''}
             <tr>
                 <td>
                     <div class="fw-semibold text-dark">Background Task Manager</div>
@@ -228,6 +254,23 @@ async function updateOutpaceEngine() {
     } catch (e) {
         console.error('Error:', e);
         alert('Network error when attempting to update.');
+    }
+}
+
+async function updateKuboEngine() {
+    if (!confirm('Do you wish to begin the Kubo IPFS update?')) return;
+    try {
+        const response = await fetch('/api/stats/ipfs/update', { method: 'POST' });
+        const result = await response.json();
+        if (response.ok) {
+            alert(result.message || 'Kubo update installed and daemon restart requested.');
+            loadSystemTasks();
+        } else {
+            alert(result.error || 'The Kubo update request could not be completed.');
+        }
+    } catch (error) {
+        console.error('Error updating Kubo:', error);
+        alert('Network error when attempting to update Kubo.');
     }
 }
 

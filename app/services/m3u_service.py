@@ -3,8 +3,9 @@ import logging
 import aiohttp
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlparse
-from ..models.url_types import create_url_object, ZeronetURL, RegularURL
+from urllib.parse import urljoin, urlparse, urlunparse
+from ..models.url_types import create_url_object, ZeronetURL, RegularURL, IPFSURL
+from ..utils.ipfs import IPFSAccessError, get_fetch_url
 from .stream_service import StreamService
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class M3UService:
         self.acestream_pattern = re.compile(r'acestream://([\w\d]+)')
         self.extinf_pattern = re.compile(r'#EXTINF:(-?\d+)\s*(?:\s*(.+?)\s*)?,\s*(.+)')
         self.tvg_pattern = re.compile(r'tvg-(?:id|name|logo|group-title)="([^"]*)"')
-        self.m3u_pattern = re.compile(r'https?://[^\s<>"]+?\.m3u[8]?(?=[\s<>"]|$)')
+        self.m3u_pattern = re.compile(r'(?:https?://|ipfs://|ipns://)[^\s<>"]+?\.m3u[8]?(?=[\s<>"]|$)')
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -67,6 +68,22 @@ class M3UService:
                         if parsed:
                             host = parsed.group(1)
                         abs_url = f"http://{host}:43110{rel_url}"
+                elif isinstance(create_url_object(base_url), IPFSURL):
+                    parsed_base = urlparse(base_url)
+                    resource_root = re.match(
+                        r'^/(ipfs|ipns)/([^/]+)',
+                        parsed_base.path
+                    )
+                    if not resource_root:
+                        raise ValueError(f"Invalid local IPFS gateway URL: {base_url}")
+                    root_path = resource_root.group(0)
+                    abs_url = urlunparse((
+                        parsed_base.scheme,
+                        parsed_base.netloc,
+                        f"{root_path}/{rel_url.lstrip('/')}",
+                        '',
+                        ''
+                    ))
                 else:
                     abs_url = urljoin(base_url, rel_url)
                 
@@ -174,17 +191,28 @@ class M3UService:
             return channels
         
         except Exception as e:
+            if isinstance(e, IPFSAccessError):
+                raise
             logger.error(f"Error extracting channels from M3U at {m3u_url}: {e}")
             return []
 
     async def _fetch_http_m3u(self, url: str) -> Optional[str]:
-        """Fetch M3U content from regular HTTP URL."""
+        """Fetch M3U content from HTTP or through Kubo for IPFS/IPNS URLs."""
+        is_ipfs_url = isinstance(create_url_object(url), IPFSURL)
         try:
+            fetch_url = get_fetch_url(url)
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=self.headers, timeout=10) as response:
+                timeout = 30 if is_ipfs_url else 10
+                async with session.get(fetch_url, headers=self.headers, timeout=timeout) as response:
                     response.raise_for_status()
                     return await response.text()
+        except IPFSAccessError:
+            raise
         except Exception as e:
+            if is_ipfs_url:
+                raise IPFSAccessError(
+                    f"Failed to fetch IPFS/IPNS URL through local Kubo: {e}"
+                ) from e
             logger.error(f"Error fetching M3U from HTTP URL {url}: {e}")
             return None
     

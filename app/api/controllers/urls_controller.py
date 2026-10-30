@@ -4,6 +4,7 @@ from app.extensions import db
 from app.models import ScrapedURL, BlacklistedChannel
 from app.repositories import URLRepository, ChannelRepository
 from app.services.scraper_service import clean_channel_name
+from app.models.url_types import create_url_object
 from datetime import datetime, timezone
 from app.tasks.manager import TaskManager
 from urllib.parse import unquote
@@ -28,7 +29,7 @@ url_update_model = api.model('URLUpdate', {
 url_model = api.model('URL', {
     'id': fields.String(description='Unique identifier for the URL'),
     'url': fields.String(description='URL being scraped'),
-    'url_type': fields.String(description='Type of URL (regular, zeronet)'),
+    'url_type': fields.String(description='Type of URL (regular, zeronet, ipfs)'),
     'status': fields.String(description='Current status of the URL'),
     'last_scraped': fields.DateTime(description='When the URL was last processed'),
     'enabled': fields.Boolean(description='Whether the URL is enabled'),
@@ -70,7 +71,7 @@ class URLList(Resource):
             # ----------------------------------------------------
             # 1. SI NO ES UNA URL WEB -> MODO BÚSQUEDA DE CANAL
             # ----------------------------------------------------
-            is_web_url = input_text.startswith(('http://', 'https://', 'ipfs://', 'zeronet://'))
+            is_web_url = input_text.startswith(('http://', 'https://', 'ipfs://', 'ipns://', 'zeronet://'))
             
             if not is_web_url or url_type == 'search':
                 from app.services.acestream_search_service import AcestreamSearchService
@@ -183,16 +184,19 @@ class URLList(Resource):
             # 2. FLUJO NORMAL PARA URLS TRADICIONALES
             # ----------------------------------------------------
             if not url_type or url_type == 'auto':
-                return {'error': "URL type must be explicitly specified as 'regular' or 'zeronet'"}, 400
+                return {'error': "URL type must be explicitly specified as 'regular', 'zeronet', or 'ipfs'"}, 400
             
-            if url_type not in ['regular', 'zeronet']:
-                return {'error': f"Invalid URL type: {url_type}. Must be 'regular' or 'zeronet'"}, 400
-            
+            if url_type not in ['regular', 'zeronet', 'ipfs']:
+                return {'error': f"Invalid URL type: {url_type}. Must be 'regular', 'zeronet', or 'ipfs'"}, 400
+
+            url_obj = create_url_object(input_text, url_type)
+            effective_url_type = url_obj.type_name
+
             existing = url_repo.get_by_url(input_text)
             if existing:
                 api.abort(409, 'This URL already exists')
             
-            url_obj = url_repo.add(input_text, url_type)
+            url_obj = url_repo.add(input_text, effective_url_type)
             
             try:
                 task_manager.add_task('scrape_url', url_obj.url)

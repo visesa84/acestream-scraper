@@ -1,7 +1,7 @@
 from .acestream_channel import AcestreamChannel
 from .scraped_url import ScrapedURL, BlacklistedChannel
 from .settings import Setting
-from .url_types import BaseURL, ZeronetURL, RegularURL, create_url_object
+from .url_types import BaseURL, ZeronetURL, RegularURL, IPFSURL, create_url_object
 from .epg_source import EPGSource
 from .epg_string_mapping import EPGStringMapping
 from .epg_program import EPGProgram
@@ -17,6 +17,7 @@ __all__ = [
     'BaseURL', 
     'ZeronetURL', 
     'RegularURL', 
+    'IPFSURL',
     'create_url_object',
     'EPGSource',
     'EPGStringMapping',

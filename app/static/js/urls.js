@@ -82,6 +82,7 @@ async function addUrl(url, urlType = 'regular') {
         const isWebUrl = cleanInput.startsWith('http://') || 
                          cleanInput.startsWith('https://') || 
                          cleanInput.startsWith('ipfs://') || 
+                         cleanInput.startsWith('ipns://') || 
                          cleanInput.startsWith('zeronet://');
 
         // Si no es un enlace web, asignamos automáticamente el tipo 'search'

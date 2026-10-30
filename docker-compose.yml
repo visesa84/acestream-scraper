@@ -19,6 +19,7 @@ services:
       - WG_THREADS=4
       - ENABLE_WARP=false
       - ENABLE_ACESTREAM_SEARCH=true
+      - ENABLE_IPFS=true
       - CONTAINER_NETWORK_MODE=host
       - WARP_LICENSE_KEY=
       - FLASK_PORT=8040

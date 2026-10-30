@@ -4,12 +4,14 @@ import json
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Set, Union
 from datetime import datetime
+from urllib.parse import urlsplit
 from bs4 import BeautifulSoup
 
 from ..extensions import db
 from ..models import ScrapedURL
 from ..models.url_types import BaseURL
 from ..services.m3u_service import M3UService
+from ..utils.ipfs import IPFSAccessError, get_fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +155,8 @@ class BaseScraper(ABC):
                         cleaned_name = self.clean_channel_name(name)
                         channels.append((channel_id, cleaned_name, metadata))
                         self.identified_ids.add(channel_id)
+            except IPFSAccessError:
+                raise
             except Exception as e:
                 logger.warning(f"Failed to process M3U file {m3u_url}: {e}")
                 
@@ -216,11 +220,13 @@ class BaseScraper(ABC):
         retries_left = self.retries
 
         # Check if the URL is directly pointing to an M3U file
-        is_m3u_file = url_to_scrape.lower().endswith(('.m3u', '.m3u8'))
+        is_m3u_file = urlsplit(url_to_scrape).path.lower().endswith(('.m3u', '.m3u8'))
         
         while retries_left >= 0:
             try:
-                content = await self.fetch_content(url_to_scrape)
+                content_url = get_fetch_url(url_to_scrape)
+                self.current_url = content_url
+                content = await self.fetch_content(content_url)
                 
                 # Direct handling for M3U files
                 if is_m3u_file:

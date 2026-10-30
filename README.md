@@ -17,7 +17,7 @@ It does not provide channel content. Configure sources or channel IDs that you a
 - Generates M3U playlists and supports traditional and HLS stream modes.
 - Schedules program recordings and processes recording files with FFmpeg.
 - Exposes a Flask web interface and a REST API with Swagger documentation.
-- Runs Outpace stream services in the Docker image; the bundled AceStream search engine can be enabled separately. ZeroNet, Tor, and Cloudflare WARP are included as optional supporting services/features.
+- Runs Outpace stream services in the Docker image; the bundled AceStream search engine and Kubo IPFS can be enabled separately. ZeroNet, Tor, and Cloudflare WARP are also included as optional supporting services/features.
 
 ## Run with Docker Compose
 
@@ -47,6 +47,7 @@ services:
       - WG_THREADS=4
       - ENABLE_WARP=false
       - ENABLE_ACESTREAM_SEARCH=true
+      - ENABLE_IPFS=true
       - CONTAINER_NETWORK_MODE=host
       - WARP_LICENSE_KEY=
       - FLASK_PORT=8040
@@ -97,6 +98,7 @@ Frequently used image environment variables:
 | `WG_QUICK_USERSPACE_IMPLEMENTATION` | `boringtun` | Use the boringtun module to process encrypted VPN traffic |
 | `WG_THREADS` | `4` | Number of CPU threads in parallel for boringtun |
 | `ENABLE_ACESTREAM_SEARCH` | `true` | Start the bundled AceStream search service on port `6880` (P2P port `8625`) |
+| `ENABLE_IPFS` | `true` | Start Kubo IPFS using the lowpower profile |
 | `CHECKSTATUS_ENABLED` | application setting | Enable automatic stream checks |
 
 Application settings such as the playlist base URL, rescrape/check intervals, EPG refresh interval, and stream mode can be managed in the web UI. See [Configuration](./wiki/Configuration.md).
@@ -116,7 +118,9 @@ Application settings such as the playlist base URL, rescrape/check intervals, EP
 
 ## Runtime architecture
 
-The image entrypoint starts the Flask/Gunicorn app, ZeroNet, and two Outpace processes (main stream listener on `6878` and a checker on `6879`). It can also start the AceStream search engine. The Outpace peer listeners use `8621` and `8622`; the search engine uses `8625`. Tor and WARP are optional.
+The image entrypoint starts the Flask/Gunicorn app, ZeroNet, and two Outpace processes (main stream listener on `6878` and a checker on `6879`). It can also start the AceStream search engine and Kubo IPFS (`ENABLE_IPFS=true`). Kubo uses the lowpower profile, DHT client routing, two Go scheduler threads, a 512 KiB Bloom filter, and a 20–40 peer connection range. The Outpace peer listeners use `8621` and `8622`; the search engine uses `8625`. Tor and WARP are optional.
+
+IPFS/IPNS sources can be entered as native `ipfs://` or `ipns://` URIs, or as subdomain gateway URLs such as `https://<CID>.ipfs.<gateway>/path` and `https://<name>.ipns.<gateway>/path`. The application preserves the entered URL and fetches its content through Kubo's local gateway; enable Kubo with `ENABLE_IPFS=true` to use these sources.
 
 Older documentation referred to PyAcexy and to a built-in Acestream engine serving the main stream port. Those instructions do not describe the current entrypoint: the current stream services are Outpace, while the bundled AceStream process is used for search.
 
@@ -138,8 +142,9 @@ The project uses Python, Flask, SQLAlchemy, and Flask-Migrate. Install the depen
 
 ## Acknowledgements
 
-This project uses Flask, SQLAlchemy, BeautifulSoup, Outpace, ZeroNet, FFmpeg, and other open-source software. See the dependency manifests and upstream projects for their respective licenses.
+This project uses Flask, SQLAlchemy, BeautifulSoup, Outpace, Kubo, ZeroNet, FFmpeg, and other open-source software. See the dependency manifests and upstream projects for their respective licenses.
 
 Special thanks to the developers of Flask, BeautifulSoup, SQLAlchemy, and other dependencies used in this project.
 - [Acestream-scrapper](https://github.com/Pipepito/acestream-scraper) - Enhanced Acestream Scraper interface
 - [Outpace](https://github.com/jamezrin/outpace) - AceStream reimplementation in Rust
+- [Kubo](https://github.com/ipfs/kubo) - IPFS implementation

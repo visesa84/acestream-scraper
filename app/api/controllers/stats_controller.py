@@ -1,22 +1,27 @@
 import io
 import tarfile
 import zipfile
-import subprocess
 import requests
 import psutil
 import os
-import time
+import signal
+import tempfile
 from flask_restx import Namespace, Resource, fields
 from app.models import AcestreamChannel, ScrapedURL
 from app.utils.config import Config
-from app.utils.platform_version import check_outpace_github_updates
+from app.utils.platform_version import (
+    check_kubo_github_updates,
+    check_outpace_github_updates,
+    get_kubo_update_arch,
+    get_local_kubo_version
+)
 
 api = Namespace('stats', description='Application statistics')
 
 url_stats_model = api.model('URLStats', {
     'id': fields.String(description='ID of the URL'),
     'url': fields.String(description='URL being scraped'),
-    'url_type': fields.String(description='Type of URL (regular, zeronet)'),
+    'url_type': fields.String(description='Type of URL (regular, zeronet, ipfs)'),
     'status': fields.String(description='Current status of the URL'),
     'last_processed': fields.DateTime(description='When the URL was last processed'),
     'channel_count': fields.Integer(description='Number of channels from this URL'),
@@ -38,8 +43,25 @@ stats_model = api.model('Stats', {
     'checkstatus_enabled': fields.Boolean(description='Whether automatic status check is enabled'),
     'task_manager_status': fields.String(description='Status of the background task manager'),
     'outpace_version': fields.String(description='Outpace engine version'),
-    'outpace_update_available': fields.Boolean(description='Update available flag')
+    'outpace_update_available': fields.Boolean(description='Update available flag'),
+    'ipfs_enabled': fields.Boolean(description='Whether Kubo IPFS is enabled'),
+    'ipfs_running': fields.Boolean(description='Whether the Kubo daemon is running'),
+    'ipfs_version': fields.String(description='Installed Kubo version'),
+    'ipfs_update_available': fields.Boolean(description='Whether a Kubo update is available')
 })
+
+def is_kubo_running():
+    for process in psutil.process_iter(["name", "cmdline"]):
+        try:
+            process_info = process.info
+        except psutil.Error:
+            continue
+        if (
+            (process_info.get("name") or "").lower() == "ipfs"
+            and "daemon" in (process_info.get("cmdline") or [])
+        ):
+            return True
+    return False
 
 @api.route('/')
 class Stats(Resource):
@@ -62,6 +84,15 @@ class Stats(Resource):
             outpace_version = gh_check.get("version", "Unknown")
             update_available = gh_check.get("update_available", False)
             # ------------------------------------------------
+            ipfs_enabled = os.environ.get("ENABLE_IPFS", "false").lower() == "true"
+            ipfs_running = False
+            ipfs_version = "N/A"
+            ipfs_update_available = False
+            if ipfs_enabled:
+                ipfs_version = get_local_kubo_version()
+                ipfs_running = is_kubo_running()
+                ipfs_check = check_kubo_github_updates(ipfs_version)
+                ipfs_update_available = ipfs_check.get("update_available", False)
 
             url_stats = []
             for url in urls:
@@ -98,7 +129,11 @@ class Stats(Resource):
                 'checkstatus_enabled': config.checkstatus_enabled,
                 'task_manager_status': task_status,
                 'outpace_version': outpace_version,
-                'outpace_update_available': update_available
+                'outpace_update_available': update_available,
+                'ipfs_enabled': ipfs_enabled,
+                'ipfs_running': ipfs_running,
+                'ipfs_version': ipfs_version,
+                'ipfs_update_available': ipfs_update_available
             }
         except Exception as e:
             api.abort(500, f"Error retrieving statistics: {str(e)}")
@@ -130,106 +165,140 @@ class TVChannelStats(Resource):
 class OutpaceUpdate(Resource):
     @api.doc('update_outpace_engine')
     def post(self):
-        """Download, extract, replace the Outpace binary, and restart both engine instances automatically."""
+        """Download and replace Outpace, then ask the entrypoint to restart both instances."""
+        supervisor_pid = os.environ.get("OUTPACE_SUPERVISOR_PID")
+        if not supervisor_pid:
+            return {"error": "Outpace supervisor is not available"}, 503
+
+        try:
+            supervisor_pid = int(supervisor_pid)
+            os.kill(supervisor_pid, 0)
+        except (ValueError, ProcessLookupError, PermissionError):
+            return {"error": "Outpace supervisor is not available"}, 503
+
+        temporary_path = None
         try:
             gh_check = check_outpace_github_updates()
             download_url = gh_check.get("download_url")
-            
+
             if not download_url:
                 return {"error": "No suitable binary found for your platform"}, 400
-                
+
             binary_response = requests.get(download_url, timeout=30)
-            if binary_response.status_code != 200:
-                return {"error": "Failed to download binary from GitHub"}, 500
-                
-            target_path = "/usr/local/bin/outpace"
+            binary_response.raise_for_status()
             content = binary_response.content
-            
-            # 1. Gestionar extracción si el asset descargado es un archivo comprimido
-            binary_data = None
+
             if download_url.endswith(('.tar.gz', '.tgz')):
                 with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as tar:
-                    executable_member = None
-                    for member in tar.getmembers():
-                        if member.name.endswith('outpace') or member.name == 'outpace':
-                            executable_member = member
-                            break
-                    if not executable_member:
-                        # Seleccionar el primer archivo regular si no coincide el nombre exacto
-                        executable_member = next(m for m in tar.getmembers() if m.isfile())
-                    binary_data = tar.extractfile(executable_member).read()
-                    
+                    members = tar.getmembers()
+                    executable_member = next(
+                        (member for member in members if member.isfile() and member.name.endswith("outpace")),
+                        next((member for member in members if member.isfile()), None)
+                    )
+                    if executable_member is None:
+                        raise ValueError("Outpace archive contains no executable file")
+                    binary = tar.extractfile(executable_member)
+                    if binary is None:
+                        raise ValueError("Could not read the Outpace binary")
+                    with binary:
+                        binary_data = binary.read()
             elif download_url.endswith('.zip'):
                 with zipfile.ZipFile(io.BytesIO(content)) as z:
-                    filename = next((name for name in z.namelist() if 'outpace' in name and not name.endswith('/')), z.namelist()[0])
+                    filenames = [name for name in z.namelist() if not name.endswith('/')]
+                    filename = next(
+                        (name for name in filenames if "outpace" in name.lower()),
+                        next(iter(filenames), None)
+                    )
+                    if filename is None:
+                        raise ValueError("Outpace archive contains no executable file")
                     binary_data = z.read(filename)
             else:
-                # Si ya es un binario plano descargado directamente
                 binary_data = content
-                
-            # 2. Guardar el binario extraído
-            with open(target_path, "wb") as f:
-                f.write(binary_data)
-                
-            # 3. Otorgar permisos de ejecución
-            os.chmod(target_path, 0o755)
-            
-            # 4. Matar los procesos actuales de outpace
-            for proc in psutil.process_iter(['name', 'exe']):
-                try:
-                    if proc.info['name'] == 'outpace' or (proc.info['exe'] and 'outpace' in proc.info['exe']):
-                        proc.kill()
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                    pass
-            
-            # 5. Relanzar ambas instancias con la configuración original
-            log_dir = "/app/logs"
-            os.makedirs(log_dir, exist_ok=True)
-            
-            # --- Instancia 1: Motor Principal (Puerto 6878) ---
-            env_main = os.environ.copy()
-            env_main.update({
-                "OUTPACE_BIND": "0.0.0.0:6878",
-                "OUTPACE_RTMP_BIND": "0.0.0.0:1935",
-                "OUTPACE_PEER_LISTEN": "0.0.0.0:8621",
-                "OUTPACE_DATA_DIR": "/root/.local/share/outpace",
-                "OUTPACE_EXPERIMENTAL_ACE_COMPAT": "1",
-                "OUTPACE_MAX_ACTIVE_UPSTREAMS": "6",
-                "OUTPACE_MAX_PARALLEL_CONNECT": "16",
-                "OUTPACE_REQUEST_TIMEOUT_MS": "3500",
-                "OUTPACE_CONNECT_TIMEOUT_MS": "5000",
-                "OUTPACE_READ_TIMEOUT_MS": "10000",
-                "OUTPACE_CACHE_SIZE_MB": "128",
-                "OUTPACE_MAX_CONNECTIONS_PER_STREAM": "35"
-            })
-            log_main = open(f"{log_dir}/outpace.log", "a")
-            subprocess.Popen(["outpace", "serve"], env=env_main, stdout=log_main, stderr=subprocess.STDOUT)
-            
-            # Pausa de 3 segundos
-            time.sleep(3)
 
-            # --- Instancia 2: Motor de Comprobación de Streams (Puerto 6879) ---
-            env_check = os.environ.copy()
-            env_check.update({
-                "OUTPACE_BIND": "0.0.0.0:6879",
-                "OUTPACE_PEER_LISTEN": "0.0.0.0:8622",
-                "OUTPACE_DATA_DIR": "/root/.local/share/outpace_check",
-                "OUTPACE_EXPERIMENTAL_ACE_COMPAT": "1",
-                "OUTPACE_MAX_ACTIVE_UPSTREAMS": "4",
-                "OUTPACE_MAX_PARALLEL_CONNECT": "8",
-                "OUTPACE_REQUEST_TIMEOUT_MS": "3500",
-                "OUTPACE_CONNECT_TIMEOUT_MS": "5000",
-                "OUTPACE_READ_TIMEOUT_MS": "10000",
-                "OUTPACE_CACHE_SIZE_MB": "32"
-            })
-            env_check.pop("OUTPACE_RTMP_BIND", None)
-            
-            log_check = open(f"{log_dir}/outpace_check_stream.log", "a")
-            subprocess.Popen(["outpace", "serve"], env=env_check, stdout=log_check, stderr=subprocess.STDOUT)
+            target_path = "/usr/local/bin/outpace"
+            with tempfile.NamedTemporaryFile(
+                dir=os.path.dirname(target_path),
+                prefix=".outpace-update-",
+                delete=False
+            ) as temporary_binary:
+                temporary_path = temporary_binary.name
+                temporary_binary.write(binary_data)
 
+            os.chmod(temporary_path, 0o755)
+            os.replace(temporary_path, target_path)
+            temporary_path = None
+            os.kill(supervisor_pid, signal.SIGUSR2)
             return {
-                "success": True, 
-                "message": "Outpace updated and successfully extracted/restarted in the background."
+                "success": True,
+                "message": "Outpace updated; both engine instances are restarting."
             }
         except Exception as e:
+            if temporary_path and os.path.exists(temporary_path):
+                os.unlink(temporary_path)
             api.abort(500, f"Error updating Outpace engine: {str(e)}")
+
+@api.route('/ipfs/update')
+class KuboUpdate(Resource):
+    @api.doc('update_kubo_ipfs')
+    def post(self):
+        """Download the latest supported Kubo binary and restart the managed daemon."""
+        if os.environ.get("ENABLE_IPFS", "false").lower() != "true":
+            return {"error": "Kubo IPFS is not enabled"}, 409
+        if get_kubo_update_arch() is None:
+            return {"error": "Kubo updates are not supported on this architecture"}, 400
+
+        supervisor_pid = os.environ.get("IPFS_SUPERVISOR_PID")
+        if not supervisor_pid:
+            return {"error": "Kubo supervisor is not available"}, 503
+
+        try:
+            os.kill(int(supervisor_pid), 0)
+        except (ValueError, ProcessLookupError, PermissionError):
+            return {"error": "Kubo supervisor is not available"}, 503
+
+        try:
+            local_version = get_local_kubo_version()
+            update = check_kubo_github_updates(local_version)
+            download_url = update.get("download_url")
+            if not update.get("update_available") or not download_url:
+                return {"error": "No Kubo update is available"}, 409
+
+            target_path = "/usr/local/bin/ipfs"
+            temporary_path = None
+            with requests.get(download_url, stream=True, timeout=60) as response:
+                response.raise_for_status()
+                with tempfile.TemporaryFile() as archive_file:
+                    for chunk in response.iter_content(chunk_size=65536):
+                        if chunk:
+                            archive_file.write(chunk)
+                    archive_file.seek(0)
+
+                    with tarfile.open(fileobj=archive_file, mode="r:gz") as archive:
+                        member = archive.getmember("kubo/ipfs")
+                        if not member.isfile():
+                            raise ValueError("Kubo release archive has no regular ipfs binary")
+                        binary = archive.extractfile(member)
+                        if binary is None:
+                            raise ValueError("Could not read the Kubo binary")
+
+                        with tempfile.NamedTemporaryFile(
+                            dir=os.path.dirname(target_path),
+                            prefix=".ipfs-update-",
+                            delete=False
+                        ) as temporary_binary:
+                            temporary_path = temporary_binary.name
+                            with binary:
+                                while chunk := binary.read(65536):
+                                    temporary_binary.write(chunk)
+
+            os.chmod(temporary_path, 0o755)
+            os.replace(temporary_path, target_path)
+            os.kill(int(supervisor_pid), signal.SIGUSR1)
+            return {
+                "success": True,
+                "message": f"Kubo {update['latest_version']} installed; daemon restart requested."
+            }
+        except Exception as e:
+            if temporary_path and os.path.exists(temporary_path):
+                os.remove(temporary_path)
+            api.abort(500, f"Error updating Kubo IPFS: {str(e)}")

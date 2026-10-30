@@ -1,5 +1,6 @@
 import platform
 import requests
+import subprocess
 import time
 
 # --- Caché en memoria para evitar superar el límite de peticiones de GitHub ---
@@ -8,6 +9,10 @@ _github_cache = {
     "timestamp": 0
 }
 CACHE_TTL = 3600  # 2 horas en segundos
+_kubo_github_cache = {
+    "data": None,
+    "timestamp": 0
+}
 
 def get_local_outpace_version():
     """Consulta la API local de Outpace para obtener la versión instalada de forma dinámica."""
@@ -75,7 +80,7 @@ def check_outpace_github_updates():
                 cached_res["version"] = local_version
                 return cached_res
             return {"version": local_version, "update_available": False, "latest_version": local_version}
-            
+
         release_data = response.json()
         latest_tag = release_data.get("tag_name", "").lstrip("v")
         assets = release_data.get("assets", [])
@@ -129,3 +134,99 @@ def check_outpace_github_updates():
             cached_res["version"] = local_version
             return cached_res
         return {"version": local_version, "update_available": False, "latest_version": local_version}
+
+def get_kubo_update_arch():
+    """Return the release architecture supported by the Kubo updater, if any."""
+    machine = platform.machine().lower()
+    if machine in ("x86_64", "amd64"):
+        return "amd64"
+    if machine in ("aarch64", "arm64"):
+        return "arm64"
+    return None
+
+def get_local_kubo_version():
+    """Return the installed Kubo version without contacting GitHub."""
+    try:
+        result = subprocess.run(
+            ["ipfs", "version", "--number"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True
+        )
+        return result.stdout.strip().removeprefix("v") or "Unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "Unknown"
+
+def check_kubo_github_updates(local_version):
+    """Check Kubo releases only on architectures with supported update assets."""
+    architecture = get_kubo_update_arch()
+    if architecture is None or local_version == "Unknown":
+        return {
+            "version": local_version,
+            "latest_version": local_version,
+            "update_available": False,
+            "download_url": None
+        }
+
+    current_time = time.time()
+    if (
+        _kubo_github_cache["data"]
+        and current_time - _kubo_github_cache["timestamp"] < CACHE_TTL
+    ):
+        cached_result = _kubo_github_cache["data"].copy()
+        cached_result["version"] = local_version
+        cached_result["update_available"] = compare_versions(
+            cached_result.get("latest_version"),
+            local_version
+        )
+        return cached_result
+
+    try:
+        response = requests.get(
+            "https://api.github.com/repos/ipfs/kubo/releases/latest",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Acestream-Scraper-Client"
+            },
+            timeout=3
+        )
+        response.raise_for_status()
+        release_data = response.json()
+        tag = release_data.get("tag_name", "")
+        latest_version = tag.removeprefix("v")
+        asset_name = f"kubo_{tag}_linux-{architecture}.tar.gz"
+        download_url = next(
+            (
+                asset.get("browser_download_url")
+                for asset in release_data.get("assets", [])
+                if asset.get("name") == asset_name
+            ),
+            None
+        )
+        result = {
+            "version": local_version,
+            "latest_version": latest_version or local_version,
+            "update_available": bool(
+                download_url and compare_versions(latest_version, local_version)
+            ),
+            "download_url": download_url
+        }
+        _kubo_github_cache["data"] = result
+        _kubo_github_cache["timestamp"] = current_time
+        return result
+    except (requests.RequestException, ValueError):
+        if _kubo_github_cache["data"]:
+            cached_result = _kubo_github_cache["data"].copy()
+            cached_result["version"] = local_version
+            cached_result["update_available"] = compare_versions(
+                cached_result.get("latest_version"),
+                local_version
+            )
+            return cached_result
+        return {
+            "version": local_version,
+            "latest_version": local_version,
+            "update_available": False,
+            "download_url": None
+        }

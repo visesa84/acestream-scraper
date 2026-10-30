@@ -1,15 +1,16 @@
 import aiohttp
 import logging
-from typing import Optional
+from typing import Optional, Union
+from urllib.parse import urlsplit
 from .base import BaseScraper
-from ..models.url_types import RegularURL
+from ..models.url_types import IPFSURL, RegularURL
 
 logger = logging.getLogger(__name__)
 
 class HTTPScraper(BaseScraper):
     """Scraper for regular HTTP/HTTPS URLs."""
 
-    def __init__(self, url_obj: RegularURL, timeout: int = 10, retries: int = 3):
+    def __init__(self, url_obj: Union[RegularURL, IPFSURL], timeout: int = 10, retries: int = 3):
         super().__init__(url_obj, timeout, retries)
         self.headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -19,7 +20,7 @@ class HTTPScraper(BaseScraper):
     async def fetch_content(self, url: str) -> str:
         """Fetch content from regular HTTP/HTTPS URLs."""
         # Check if URL is directly pointing to an M3U file
-        is_m3u_file = url.lower().endswith(('.m3u', '.m3u8'))
+        is_m3u_file = urlsplit(url).path.lower().endswith(('.m3u', '.m3u8'))
         if is_m3u_file:
             logger.info(f"Detected direct M3U file URL: {url}")
         else:

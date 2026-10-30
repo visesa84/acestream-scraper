@@ -94,9 +94,15 @@ function updateSourcesList() {
         setupState.sources.forEach(source => {
             const item = document.createElement('div');
             item.className = 'list-group-item source-item d-flex justify-content-between align-items-center';
+            const isIpfsSource = /^(ipfs|ipns):\/\//i.test(source.url) ||
+                /^https?:\/\/[^/?#]+\.(ipfs|ipns)\./i.test(source.url) ||
+                /^https?:\/\/[^/?#]+\/(ipfs|ipns)\//i.test(source.url);
+            const sourceTypeLabel = isIpfsSource
+                ? 'IPFS / IPNS'
+                : source.url_type === 'zeronet' ? 'ZeroNet' : 'HTTP';
             item.innerHTML = `
                 <span class="text-break">${source.url}</span>
-                <span class="badge bg-info me-2">${source.url_type === 'zeronet' ? 'ZeroNet' : 'HTTP'}</span>
+                <span class="badge bg-info me-2">${sourceTypeLabel}</span>
                 <button class="btn btn-sm btn-outline-danger remove-source-btn" data-url="${source.url}">
                     <i class="bi bi-trash"></i>
                 </button>

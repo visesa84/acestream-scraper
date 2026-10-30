@@ -29,6 +29,7 @@ These are the main environment variables defined or consumed by the current Dock
 | `ENABLE_TOR` | `false` | Starts the Tor service |
 | `ENABLE_WARP` | `false` | Runs WARP initialization |
 | `ENABLE_ACESTREAM_SEARCH` | `true` | Starts the bundled search engine (`6880` HTTP, `8625` P2P) |
+| `ENABLE_IPFS` | `false` | Starts Kubo IPFS with the lowpower profile |
 | `CHECKSTATUS_ENABLED` | unset | When set, overrides the stored status-check setting |
 | `WARP_LICENSE_KEY` | empty | Optional WARP license key |
 | `WG_QUICK_USERSPACE_IMPLEMENTATION` | `boringtun` | WireGuard userspace implementation |
@@ -36,7 +37,9 @@ These are the main environment variables defined or consumed by the current Dock
 
 The image also defines memory allocator variables (`LD_PRELOAD`, `MALLOC_CONF`). `entrypoint.sh` sets the Outpace bind addresses and tuning values internally; these are not presented as user-configurable application settings.
 
-The current entrypoint starts Outpace on `6878` and a checker instance on `6879`, with peer ports `8621` and `8622`. The bundled AceStream executable is used for search, not as the main Outpace stream service. Legacy variables and examples for PyAcexy are not part of the current startup configuration.
+The current entrypoint starts Outpace on `6878` and a checker instance on `6879`, with peer ports `8621` and `8622`. When `ENABLE_IPFS=true`, Kubo stores its node data under `/app/config/ipfs` and runs with the lowpower profile, DHT client routing, a 512 KiB Bloom filter, two Go scheduler threads, and a 20–40 peer connection range. The bundled AceStream executable is used for search, not as the main Outpace stream service. Legacy variables and examples for PyAcexy are not part of the current startup configuration.
+
+Sources may use native `ipfs://`/`ipns://` URIs or subdomain gateway URLs (`<CID>.ipfs.<gateway>` and `<name>.ipns.<gateway>`). Their original URL is stored, but content is fetched through Kubo's local gateway, so Kubo must be enabled with `ENABLE_IPFS=true`.
 
 ## Docker port reference
 

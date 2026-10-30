@@ -2,7 +2,7 @@ from typing import Optional
 from .base import BaseScraper
 from .http import HTTPScraper
 from .zeronet import ZeronetScraper
-from ..models.url_types import ZeronetURL, RegularURL, create_url_object
+from ..models.url_types import IPFSURL, ZeronetURL, RegularURL, create_url_object
 
 def create_scraper_for_url(url: str, url_type: str, timeout: Optional[int] = None, retries: Optional[int] = None) -> BaseScraper:
     """
@@ -10,7 +10,7 @@ def create_scraper_for_url(url: str, url_type: str, timeout: Optional[int] = Non
     
     Args:
         url: The URL to scrape
-        url_type: The URL type ('auto', 'zeronet', 'regular')
+        url_type: The URL type ('auto', 'zeronet', 'regular', 'ipfs')
         timeout: Optional custom timeout value
         retries: Optional custom retry count
     
@@ -21,8 +21,12 @@ def create_scraper_for_url(url: str, url_type: str, timeout: Optional[int] = Non
     
     # Validate URL type is not 'auto'
     if url_type == 'auto':
-        raise ValueError("URL type 'auto' is not allowed. Please specify 'regular' or 'zeronet'")
-    
+        raise ValueError("URL type 'auto' is not allowed. Please specify 'regular', 'zeronet', or 'ipfs'")
+
+    if isinstance(url_obj, IPFSURL):
+        timeout = timeout or 30
+        retries = retries or 3
+        return HTTPScraper(url_obj, timeout=timeout, retries=retries)
     if isinstance(url_obj, ZeronetURL):
         timeout = timeout or 20
         retries = retries or 5
@@ -39,7 +43,9 @@ def create_scraper(url: str, timeout: Optional[int] = None, retries: Optional[in
     """Legacy function for backward compatibility"""
     # Auto-detect URL type and delegate to create_scraper_for_url with explicit type
     url_obj = create_url_object(url, 'auto')
-    if isinstance(url_obj, ZeronetURL):
+    if isinstance(url_obj, IPFSURL):
+        detected_type = 'ipfs'
+    elif isinstance(url_obj, ZeronetURL):
         detected_type = 'zeronet'
     else:
         detected_type = 'regular'

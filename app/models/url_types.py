@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from urllib.parse import urlparse
+import re
+from urllib.parse import quote, urlparse, urlsplit, urlunsplit
 import logging
 
 logger = logging.getLogger(__name__)
@@ -120,13 +121,92 @@ class RegularURL(BaseURL):
         return parsed.scheme in ('http', 'https') and bool(parsed.netloc)
 
 
+class IPFSURL(BaseURL):
+    """URL type for IPFS and IPNS resources, including HTTP gateway URLs."""
+
+    @staticmethod
+    def _get_resource(url):
+        parsed = urlsplit(url)
+
+        if parsed.scheme in ('ipfs', 'ipns'):
+            if not parsed.netloc or '@' in parsed.netloc:
+                raise ValueError(f"Invalid IPFS/IPNS URL: {url}")
+            kind = parsed.scheme
+            identifier = parsed.netloc
+            path = parsed.path or '/'
+        elif parsed.scheme in ('http', 'https') and parsed.hostname:
+            if parsed.username or parsed.password:
+                raise ValueError(f"Invalid IPFS gateway URL: {url}")
+
+            subdomain_match = re.fullmatch(
+                r'(.+?)\.(ipfs|ipns)\.(.+)',
+                parsed.hostname,
+                re.IGNORECASE
+            )
+            if subdomain_match:
+                identifier, kind, _ = subdomain_match.groups()
+                path = parsed.path or '/'
+            else:
+                path_match = re.match(r'^/(ipfs|ipns)/([^/]+)(/.*)?$', parsed.path)
+                if not path_match:
+                    raise ValueError(f"Not an IPFS/IPNS URL: {url}")
+                kind, identifier, remainder = path_match.groups()
+                path = remainder or ''
+        else:
+            raise ValueError(f"Not an IPFS/IPNS URL: {url}")
+
+        if not identifier or re.search(r'[/\\?#\s]', identifier):
+            raise ValueError(f"Invalid IPFS/IPNS identifier in URL: {url}")
+
+        return kind.lower(), identifier, path, parsed.query, parsed.fragment
+
+    def _validate(self):
+        self._get_resource(self.original_url)
+
+    def get_normalized_url(self):
+        return self.original_url
+
+    def get_local_gateway_url(
+        self,
+        url=None,
+        gateway_url='http://127.0.0.1:8080'
+    ):
+        """Translate this IPFS/IPNS URL to Kubo's local HTTP gateway."""
+        source_url = url or self.original_url
+        kind, identifier, path, query, fragment = self._get_resource(source_url)
+        gateway = urlsplit(gateway_url)
+        if gateway.scheme not in ('http', 'https') or not gateway.netloc:
+            raise ValueError(f"Invalid local IPFS gateway URL: {gateway_url}")
+
+        encoded_identifier = quote(identifier, safe='.-_~')
+        gateway_path = gateway.path.rstrip('/')
+        resource_path = path if path.startswith('/') else f'/{path}' if path else ''
+        local_path = f'{gateway_path}/{kind}/{encoded_identifier}{resource_path}'
+
+        return urlunsplit((
+            gateway.scheme,
+            gateway.netloc,
+            local_path,
+            query,
+            fragment
+        ))
+
+    @staticmethod
+    def is_valid_url(url):
+        try:
+            IPFSURL._get_resource(url)
+            return True
+        except (TypeError, ValueError):
+            return False
+
+
 def create_url_object(url, url_type='auto'):
     """
     Create a URL object of the appropriate type based on the URL string.
     
     Args:
         url (str): The URL string
-        url_type (str): Optional explicit URL type ('regular', 'zeronet', 'auto')
+        url_type (str): Optional explicit URL type ('regular', 'zeronet', 'ipfs', 'auto')
         
     Returns:
         BaseURL: A subclass of BaseURL appropriate for the URL type
@@ -139,7 +219,10 @@ def create_url_object(url, url_type='auto'):
     
     if not url:
         raise ValueError("URL cannot be empty")
-    
+
+    if IPFSURL.is_valid_url(url):
+        return IPFSURL(url)
+
     # Handle explicit URL types
     if url_type == 'regular':
         # For explicit regular URLs, skip validation to allow non-standard URLs
@@ -147,6 +230,8 @@ def create_url_object(url, url_type='auto'):
     elif url_type == 'zeronet':
         # For explicit ZeroNet URLs, skip validation as user has specified the type
         return ZeronetURL(url, skip_validation=True)
+    elif url_type == 'ipfs':
+        return IPFSURL(url)
     elif url_type != 'auto':
         raise ValueError(f"Unsupported URL type: {url_type}")
     
