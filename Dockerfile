@@ -8,9 +8,9 @@ WORKDIR /src
 RUN sed -i 's/\[dependencies\]/\[dependencies\]\ntime = "=0.3.36"\ntime-core = "=0.1.2"/' boringtun-cli/Cargo.toml
 RUN cargo install --path boringtun-cli
 
-# --- STAGE 1: Descarga de Outpace desde GitHub usando la misma lógica Python ---
+# --- STAGE 1: Descarga automática de Outpace desde GitHub según arquitectura ---
 FROM python:3.10-slim AS builder-outpace
-RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip jq
+RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip
 
 RUN echo "import platform" > /tmp/download.py && \
     echo "import urllib.request" >> /tmp/download.py && \
@@ -31,7 +31,7 @@ RUN echo "import platform" > /tmp/download.py && \
     echo '    arch_keywords = ["amd64", "x86_64", "x64"]' >> /tmp/download.py && \
     echo 'elif machine in ["aarch64", "armv8", "arm64"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["arm64", "aarch64"]' >> /tmp/download.py && \
-	echo 'elif machine in ["arm", "hf", "armv7l"]:' >> /tmp/download.py && \
+    echo 'elif machine in ["arm", "hf", "armv7l"]:' >> /tmp/download.py && \
     echo '    arch_keywords = ["armv7", "armhf", "arm"]' >> /tmp/download.py && \
     echo 'else:' >> /tmp/download.py && \
     echo '    arch_keywords = [machine]' >> /tmp/download.py && \
@@ -42,22 +42,28 @@ RUN echo "import platform" > /tmp/download.py && \
     echo '        if "apple" not in name and "windows" not in name:' >> /tmp/download.py && \
     echo '            download_url = asset.get("browser_download_url")' >> /tmp/download.py && \
     echo '            break' >> /tmp/download.py && \
-    echo 'if not download_url and len(assets) == 1:' >> /tmp/download.py && \
-    echo '    download_url = assets[0].get("browser_download_url")' >> /tmp/download.py && \
-    echo 'print(f"Downloading Outpace asset from: {download_url}")' >> /tmp/download.py && \
+    echo 'if not download_url:' >> /tmp/download.py && \
+    echo '    raise Exception(f"No se encontró un asset compatible para Linux y arquitectura {machine}")' >> /tmp/download.py && \
+    echo 'print(f"Descargando Outpace asset desde: {download_url}")' >> /tmp/download.py && \
     echo 'urllib.request.urlretrieve(download_url, "/tmp/outpace_asset")' >> /tmp/download.py && \
     echo 'target_path = "/usr/local/bin/outpace"' >> /tmp/download.py && \
     echo 'if download_url.endswith((".tar.gz", ".tgz")):' >> /tmp/download.py && \
     echo '    with tarfile.open("/tmp/outpace_asset", "r:gz") as tar:' >> /tmp/download.py && \
-    echo '        member = next((m for m in tar.getmembers() if "outpace" in m.name and m.isfile()), None)' >> /tmp/download.py && \
+    echo '        # Filtrar estrictamente excluyendo licencias y documentos de texto' >> /tmp/download.py && \
+    echo '        member = next((m for m in tar.getmembers() if m.isfile() and not m.name.lower().endswith((".md", ".txt", "license", "copying")) and ("outpace" in m.name.lower() or len(tar.getmembers()) == 1)), None)' >> /tmp/download.py && \
     echo '        if not member:' >> /tmp/download.py && \
-    echo '            member = next(m for m in tar.getmembers() if m.isfile())' >> /tmp/download.py && \
+    echo '            member = next((m for m in tar.getmembers() if m.isfile() and not m.name.lower().endswith((".md", ".txt", "license", "copying"))), None)' >> /tmp/download.py && \
+    echo '        if not member:' >> /tmp/download.py && \
+    echo '            raise Exception("ERROR: No se encontró ningún archivo binario válido en el tar.gz de Outpace.")' >> /tmp/download.py && \
     echo '        extracted = tar.extractfile(member)' >> /tmp/download.py && \
     echo '        with open(target_path, "wb") as f_out:' >> /tmp/download.py && \
     echo '            f_out.write(extracted.read())' >> /tmp/download.py && \
     echo 'elif download_url.endswith(".zip"):' >> /tmp/download.py && \
     echo '    with zipfile.ZipFile("/tmp/outpace_asset", "r") as z:' >> /tmp/download.py && \
-    echo '        fname = next((n for n in z.namelist() if "outpace" in n and not n.endswith("/")), z.namelist()[0])' >> /tmp/download.py && \
+    echo '        namelist = [n for n in z.namelist() if not n.endswith("/") and not any(n.lower().endswith(ext) for ext in [".md", ".txt", "license", "copying"])]' >> /tmp/download.py && \
+    echo '        fname = next((n for n in namelist if "outpace" in n.lower()), namelist[0] if namelist else None)' >> /tmp/download.py && \
+    echo '        if not fname:' >> /tmp/download.py && \
+    echo '            raise Exception("ERROR: No se encontró ningún binario válido en el zip.")' >> /tmp/download.py && \
     echo '        with z.open(fname) as f_in, open(target_path, "wb") as f_out:' >> /tmp/download.py && \
     echo '            f_out.write(f_in.read())' >> /tmp/download.py && \
     echo 'else:' >> /tmp/download.py && \
@@ -93,7 +99,7 @@ FROM python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.2"
+      version="2.2.1"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -195,7 +201,7 @@ FROM base
 WORKDIR /app
 
 LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.2"
+      version="2.2.1"
 
 # Copiar archivos de la aplicación y scripts de control
 COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh

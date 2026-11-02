@@ -44,6 +44,7 @@ stats_model = api.model('Stats', {
     'task_manager_status': fields.String(description='Status of the background task manager'),
     'outpace_version': fields.String(description='Outpace engine version'),
     'outpace_update_available': fields.Boolean(description='Update available flag'),
+    'outpace_running': fields.Boolean(description='Whether Outpace engine instances are running'),
     'ipfs_enabled': fields.Boolean(description='Whether Kubo IPFS is enabled'),
     'ipfs_running': fields.Boolean(description='Whether the Kubo daemon is running'),
     'ipfs_version': fields.String(description='Installed Kubo version'),
@@ -83,6 +84,8 @@ class Stats(Resource):
             gh_check = check_outpace_github_updates()
             outpace_version = gh_check.get("version", "Unknown")
             update_available = gh_check.get("update_available", False)
+            outpace_instances = is_outpace_running()
+            outpace_running = outpace_instances > 0
             # ------------------------------------------------
             ipfs_enabled = os.environ.get("ENABLE_IPFS", "false").lower() == "true"
             ipfs_running = False
@@ -130,6 +133,7 @@ class Stats(Resource):
                 'task_manager_status': task_status,
                 'outpace_version': outpace_version,
                 'outpace_update_available': update_available,
+                'outpace_running': outpace_running,
                 'ipfs_enabled': ipfs_enabled,
                 'ipfs_running': ipfs_running,
                 'ipfs_version': ipfs_version,
@@ -191,12 +195,13 @@ class OutpaceUpdate(Resource):
             if download_url.endswith(('.tar.gz', '.tgz')):
                 with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as tar:
                     members = tar.getmembers()
+                    # Blindaje: excluir estrictamente archivos de texto, markdown y licencias
                     executable_member = next(
-                        (member for member in members if member.isfile() and member.name.endswith("outpace")),
-                        next((member for member in members if member.isfile()), None)
+                        (member for member in members if member.isfile() and not member.name.lower().endswith((".md", ".txt", "license", "copying")) and "outpace" in member.name.lower()),
+                        next((member for member in members if member.isfile() and not member.name.lower().endswith((".md", ".txt", "license", "copying"))), None)
                     )
                     if executable_member is None:
-                        raise ValueError("Outpace archive contains no executable file")
+                        raise ValueError("Outpace archive contains no valid executable binary")
                     binary = tar.extractfile(executable_member)
                     if binary is None:
                         raise ValueError("Could not read the Outpace binary")
@@ -204,13 +209,13 @@ class OutpaceUpdate(Resource):
                         binary_data = binary.read()
             elif download_url.endswith('.zip'):
                 with zipfile.ZipFile(io.BytesIO(content)) as z:
-                    filenames = [name for name in z.namelist() if not name.endswith('/')]
+                    filenames = [name for name in z.namelist() if not name.endswith('/') and not any(name.lower().endswith(ext) for ext in [".md", ".txt", "license", "copying"])]
                     filename = next(
                         (name for name in filenames if "outpace" in name.lower()),
-                        next(iter(filenames), None)
+                        filenames[0] if filenames else None
                     )
                     if filename is None:
-                        raise ValueError("Outpace archive contains no executable file")
+                        raise ValueError("Outpace archive contains no valid executable binary")
                     binary_data = z.read(filename)
             else:
                 binary_data = content
@@ -236,6 +241,20 @@ class OutpaceUpdate(Resource):
             if temporary_path and os.path.exists(temporary_path):
                 os.unlink(temporary_path)
             api.abort(500, f"Error updating Outpace engine: {str(e)}")
+            
+def is_outpace_running():
+    """Cuenta cuántas instancias de Outpace están activas en el sistema."""
+    count = 0
+    for process in psutil.process_iter(["name", "cmdline"]):
+        try:
+            process_info = process.info
+            name = (process_info.get("name") or "").lower()
+            cmdline = " ".join(process_info.get("cmdline") or [])
+            if "outpace" in name or "outpace" in cmdline.lower():
+                count += 1
+        except psutil.Error:
+            continue
+    return count
 
 @api.route('/ipfs/update')
 class KuboUpdate(Resource):

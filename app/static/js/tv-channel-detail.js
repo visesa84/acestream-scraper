@@ -711,7 +711,7 @@ async function checkAcestreamStatus(acestream_id) {
     try {
         showLoading();
         
-        const response = await fetch(`/api/channels/${acestream_id}/status`, {
+        const response = await fetch(`/api/channels/${acestream_id}/check-status`, {
             method: 'POST'
         });
         
