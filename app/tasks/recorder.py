@@ -189,17 +189,29 @@ def process_recordings(app, single_program_id=None):
 
             if rec.status == 'retrying':
                 elapsed = (datetime.now() - rec.retry_start).total_seconds()
-                if elapsed >= 120:
-                    rec.status = 'failed'
-                    db.session.commit()
-                    continue
-
+                
+                # Buscamos si hay algún canal online disponible en este momento
                 tv_chan = TVChannel.query.filter_by(epg_id=prog.epg_channel.channel_xml_id).first()
-                if tv_chan:
-                    ace_chan = _get_random_online_channel(tv_chan.id)
-                    if ace_chan:
-                        rec.status = 'pending'
+                ace_chan = _get_random_online_channel(tv_chan.id) if tv_chan else None
+
+                if ace_chan:
+                    # Si encuentra un canal online, pasa a pendiente para arrancar la grabación de inmediato
+                    rec.status = 'pending'
+                    db.session.commit()
+                    app.logger.info(f"[RECORDER] Stream recovered for {prog.title}. Resuming recording...")
+                elif elapsed >= 120:
+                    # SI PASAN LOS 120 SEGUNDOS Y NO HAY STREAM:
+                    # En lugar de fallar definitivamente, comprobamos si el programa aún no ha terminado
+                    if rec.end_time > now:
+                        # Reiniciamos el cronómetro de reintento para darle otros 2 minutos de búsqueda
+                        rec.retry_start = datetime.now()
                         db.session.commit()
+                        app.logger.warning(f"[RECORDER] Still no streams for {prog.title}. Keeping retry alive...")
+                    else:
+                        # Si ya pasó la hora de fin del programa, entonces sí lo damos por fallido
+                        rec.status = 'failed'
+                        db.session.commit()
+                        app.logger.error(f"[RECORDER] Program {prog.title} ended while retrying. Marked as failed.")
                 continue
 
         # 3. INICIAR PENDIENTES
@@ -212,6 +224,15 @@ def process_recordings(app, single_program_id=None):
         to_start = query.filter(RecordingSchedule.program_id == single_program_id).all() if single_program_id else query.all()
 
         for rec in to_start:
+            prog = rec.program
+            
+            # Si el programa ya ha finalizado su hora de emisión y sigue pendiente, lo marcamos como fallido
+            if rec.end_time <= now:
+                rec.status = 'failed'
+                db.session.commit()
+                app.logger.warning(f"[RECORDER] Program {prog.title} expired while pending. Marked as failed.")
+                continue
+
             already_recording = any(f"prog_id:{rec.program_id}" in " ".join(p.info.get('cmdline') or []) 
                                     for p in psutil.process_iter(['cmdline']))
             if already_recording:
@@ -219,12 +240,15 @@ def process_recordings(app, single_program_id=None):
                 db.session.commit()
                 continue
 
-            prog = rec.program
             tv_chan = TVChannel.query.filter_by(epg_id=prog.epg_channel.channel_xml_id).first()
-            if not tv_chan: continue
+            if not tv_chan: 
+                rec.status = 'failed'
+                db.session.commit()
+                continue
 
             ace_chan = _get_random_online_channel(tv_chan.id)
-            if not ace_chan: continue
+            if not ace_chan:
+                continue 
 
             clean_title = "".join([c for c in prog.title if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
             existing_parts = [f for f in os.listdir(save_path) if f.startswith(f"{clean_title}_{prog.id}")]
@@ -243,7 +267,7 @@ def process_recordings(app, single_program_id=None):
                 '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1',
                 '-reconnect_delay_max', '5', '-rw_timeout', '15000000',
                 '-i', stream_url,
-                '-c', 'copy',                    # Captura limpia y directa sin re-codificar en caliente
+                '-c', 'copy',                    
                 '-user_agent', f'prog_id:{prog.id}', filename
             ]
 
@@ -264,6 +288,7 @@ def stop_recording_now(program_id):
         rec = RecordingSchedule.query.filter_by(program_id=program_id).first()
         if rec:
             rec.end_time = datetime.now()
+            rec.status = 'completed'
             db.session.commit()
             
             _kill_ffmpeg_for_program(program_id)
