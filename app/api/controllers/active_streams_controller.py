@@ -35,8 +35,8 @@ class ActiveStreamsResource(Resource):
                             # Limpiamos prefijos como 'ih:' o 'cid:' para obtener el hash puro
                             clean_id = str(stream_id).replace('ih:', '').replace('cid:', '').strip()
                             
-                            # Determinamos si el stream usa infohash o content_id tradicional
-                            is_infohash = str(stream_id).startswith('ih:') or len(clean_id) == 40
+                            # Determinamos estrictamente si es infohash por su prefijo o clave original
+                            is_infohash = str(stream_id).startswith('ih:') or bool(stream.get('infohash'))
                             
                             params = {'format': 'json'}
                             if is_infohash:
@@ -49,7 +49,7 @@ class ActiveStreamsResource(Resource):
                                 params=params,
                                 timeout=2
                             )
-                            current_app.logger.info(f"Getstream response for {clean_id}: status {getstream_resp.status_code}")
+                            current_app.logger.info(f"Getstream response for {clean_id} (is_infohash={is_infohash}): status {getstream_resp.status_code}")
                             
                             if getstream_resp.status_code == 200:
                                 gs_data = getstream_resp.json()
