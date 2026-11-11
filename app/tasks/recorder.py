@@ -19,7 +19,7 @@ conversion_lock = threading.Lock()
 def fast_remux_to_mp4(input_ts, output_mp4):
     """
     Transcodifica de forma segura a H.264/AAC estándar para evitar 
-    cualquier corrupción y errores de memoria en Firefox.
+    cualquier corrupción y errores de memoria.
     """
     cmd = [
         'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
@@ -142,9 +142,9 @@ def process_recordings(app, single_program_id=None):
 
         setting_rec = Setting.query.filter_by(key='base_url').first()
         if setting_rec and setting_rec.value:
-            base_url = setting_rec.value.rstrip('/') + "/ace/getstream?id="
+            base_url = setting_rec.value.rstrip('/') + "/ace/getstream"
         else:
-            base_url = "http://127.0.0.1:6878/ace/getstream?id="
+            base_url = "http://127.0.0.1:6878/ace/getstream"
 
         # 1. PARAR GRABACIONES CUYO TIEMPO EXPIRÓ
         for proc in psutil.process_iter(['name', 'cmdline']):
@@ -201,14 +201,11 @@ def process_recordings(app, single_program_id=None):
                     app.logger.info(f"[RECORDER] Stream recovered for {prog.title}. Resuming recording...")
                 elif elapsed >= 120:
                     # SI PASAN LOS 120 SEGUNDOS Y NO HAY STREAM:
-                    # En lugar de fallar definitivamente, comprobamos si el programa aún no ha terminado
                     if rec.end_time > now:
-                        # Reiniciamos el cronómetro de reintento para darle otros 2 minutos de búsqueda
                         rec.retry_start = datetime.now()
                         db.session.commit()
                         app.logger.warning(f"[RECORDER] Still no streams for {prog.title}. Keeping retry alive...")
                     else:
-                        # Si ya pasó la hora de fin del programa, entonces sí lo damos por fallido
                         rec.status = 'failed'
                         db.session.commit()
                         app.logger.error(f"[RECORDER] Program {prog.title} ended while retrying. Marked as failed.")
@@ -226,7 +223,6 @@ def process_recordings(app, single_program_id=None):
         for rec in to_start:
             prog = rec.program
             
-            # Si el programa ya ha finalizado su hora de emisión y sigue pendiente, lo marcamos como fallido
             if rec.end_time <= now:
                 rec.status = 'failed'
                 db.session.commit()
@@ -259,7 +255,12 @@ def process_recordings(app, single_program_id=None):
             duration = int((rec.end_time - now).total_seconds())
             if duration <= 0: continue
 
-            stream_url = f"{base_url}{ace_chan.id}"
+            # Soporte inteligente para infohash (ih:) o Content ID tradicional
+            if ace_chan.id.startswith('ih:'):
+                clean_infohash = ace_chan.id.replace('ih:', '')
+                stream_url = f"{base_url}?infohash={clean_infohash}"
+            else:
+                stream_url = f"{base_url}?id={ace_chan.id}"
 
             cmd = [
                 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',

@@ -215,10 +215,26 @@ def recordings_page():
 def proxy_acestream():
     from ..utils.config import Config
     config = Config()
+    
     stream_id = request.args.get('id')
+    infohash_param = request.args.get('infohash')
     
     ace_url = getattr(config, 'ace_engine_url', 'http://127.0.0.1:6878').rstrip('/')
-    target_url = f"{ace_url}/ace/getstream?id={stream_id}"
+    
+    # Si nos llega un infohash directamente por parámetro o si el stream_id trae el prefijo 'ih:'
+    if infohash_param:
+        clean_infohash = infohash_param.replace('ih:', '') if infohash_param.startswith('ih:') else infohash_param
+        target_url = f"{ace_url}/ace/getstream?infohash={clean_infohash}"
+    elif stream_id:
+        if stream_id.startswith('ih:'):
+            # Si viene con el formato guardado en BD 'ih:INFOHASH'
+            clean_infohash = stream_id.replace('ih:', '')
+            target_url = f"{ace_url}/ace/getstream?infohash={clean_infohash}"
+        else:
+            # Comportamiento tradicional con Content ID
+            target_url = f"{ace_url}/ace/getstream?id={stream_id}"
+    else:
+        return "Missing stream identifier (id or infohash)", 400
     
     try:
         req = requests.get(target_url, stream=True, timeout=15)
@@ -229,7 +245,6 @@ def proxy_acestream():
                     if chunk:
                         yield chunk
             except Exception as stream_err:
-                # Capturamos el timeout o pérdida de peers de forma silenciosa/controlada
                 logger.warning(f"Outpace stream disconnected or timed out (no peers?): {stream_err}")
                 return
 
@@ -243,7 +258,7 @@ def proxy_acestream():
         return f"Error connecting to Outpace engine: {e}", 502
 
 @bp.route('/streams/ace/cid:<path:cid_path>')
-def proxy_outpace_hls(cid_path):
+def proxy_outpace_hls_cid(cid_path):
     from ..utils.config import Config
     config = Config()
     
@@ -259,7 +274,7 @@ def proxy_outpace_hls(cid_path):
                     if chunk:
                         yield chunk
             except Exception as stream_err:
-                logger.warning(f"Outpace HLS stream disconnected or timed out: {stream_err}")
+                logger.warning(f"Outpace HLS stream disconnected or timed out (CID): {stream_err}")
                 return
 
         return Response(
@@ -268,5 +283,34 @@ def proxy_outpace_hls(cid_path):
             content_type=req.headers.get('content-type', 'application/vnd.apple.mpegurl')
         )
     except Exception as e:
-        logger.error(f"Initial error in HLS Outspace proxy: {e}")
+        logger.error(f"Initial error in HLS Outspace proxy (CID): {e}")
+        return f"Error connecting to HLS Outpace engine: {e}", 502
+
+@bp.route('/streams/ace/ih:<path:ih_path>')
+def proxy_outpace_hls_ih(ih_path):
+    from ..utils.config import Config
+    config = Config()
+    
+    ace_url = getattr(config, 'ace_engine_url', 'http://127.0.0.1:6878').rstrip('/')
+    target_url = f"{ace_url}/streams/ace/ih:{ih_path}"
+    
+    try:
+        req = requests.get(target_url, stream=True, timeout=60)
+        
+        def generate():
+            try:
+                for chunk in req.iter_content(chunk_size=1024*64):
+                    if chunk:
+                        yield chunk
+            except Exception as stream_err:
+                logger.warning(f"Outpace HLS stream disconnected or timed out (IH): {stream_err}")
+                return
+
+        return Response(
+            stream_with_context(generate()),
+            status=req.status_code,
+            content_type=req.headers.get('content-type', 'application/vnd.apple.mpegurl')
+        )
+    except Exception as e:
+        logger.error(f"Initial error in HLS Outspace proxy (IH): {e}")
         return f"Error connecting to HLS Outpace engine: {e}", 502

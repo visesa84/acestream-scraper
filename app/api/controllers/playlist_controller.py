@@ -1,7 +1,9 @@
 from flask_restx import Namespace, Resource, fields, reqparse
-from flask import Response, redirect, request, current_app
+from flask import Response, redirect, request, current_app, stream_with_context
 import time
 from datetime import datetime
+import os
+import requests
 from app.models import AcestreamChannel
 from app.services.playlist_service import PlaylistService
 from app.repositories import URLRepository
@@ -123,7 +125,6 @@ class PlaylistWithEPG(Resource):
         search = args.get('search')
         favorites = args.get('favorites_only', False)
         
-        # Construimos la URL completa (http://ip:puerto)
         full_base_url = f"{request.scheme}://{request.host}"
         
         playlist_service = PlaylistService()
@@ -133,7 +134,6 @@ class PlaylistWithEPG(Resource):
             base_url=full_base_url
         )
         
-        # Construcción dinámica del nombre del archivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"m3u_playlist_with_epg_{timestamp}"
         
@@ -208,7 +208,7 @@ class OnlinePlaylist(Resource):
     def get(self):
         args = playlist_parser.parse_args()
         search = args.get('search')
-        favorites = args.get('favorites_only', False) # Captura el booleano
+        favorites = args.get('favorites_only', False)
         
         playlist_service = PlaylistService()
         playlist = playlist_service.generate_online_only_playlist(
@@ -224,7 +224,7 @@ class OnlinePlaylist(Resource):
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
 
-# 1. Proxy para getstream (TS tradicional)
+# 1. Proxy para getstream (TS tradicional) adaptado para infohash y content_id
 @api.route('/ace/getstream')
 class StreamProxy(Resource):
     @api.doc('proxy_ace_stream')
@@ -235,6 +235,15 @@ class StreamProxy(Resource):
         
         outpace_url = f"http://127.0.0.1:{outpace_port}/ace/getstream"
         params = request.args.to_dict()
+        
+        # Comprobamos si nos llega un parámetro 'id' o 'infohash' que contenga el prefijo 'ih:'
+        for key in ['id', 'infohash', 'content_id']:
+            if key in params and params[key].startswith('ih:'):
+                clean_value = params[key].replace('ih:', '')
+                params['infohash'] = clean_value
+                if key != 'infohash':
+                    params.pop(key, None)
+                break
         
         try:
             req = requests.get(outpace_url, params=params, stream=True, timeout=15)
@@ -249,19 +258,24 @@ class StreamProxy(Resource):
                 content_type=req.headers.get('content-type', 'video/mp2t')
             )
         except requests.exceptions.RequestException as e:
-            return Response(f"Error conectando con el motor Outpace: {str(e)}", status=502)
+            return Response(f"Error connecting to the Outpace engine: {str(e)}", status=502)
 
 
+# 2. Proxy dinámico para flujos HLS (.m3u8 y segmentos .ts)
 # 2. Proxy dinámico para flujos HLS (.m3u8 y segmentos .ts)
 @api.route('/streams/ace/<path:hls_path>')
 class HLSStreamProxy(Resource):
     @api.doc('proxy_ace_hls_stream')
     def get(self, hls_path):
-        """Proxy inverso para redirigir el tráfico HLS (.m3u8 / .ts) de Flask a Outpace"""
+        """Proxy inverso para redirigir el tráfico HLS (.m3u8 / .ts) de Flask a Outpace manteniendo ih:"""
         outpace_bind = os.environ.get('OUTPACE_BIND', '127.0.0.1:6878')
         outpace_port = outpace_bind.split(':')[-1] if ':' in outpace_bind else '6878'
         
-        # Construimos la URL completa de Outpace manteniendo la ruta interna HLS intacta
+        # Mantenemos intacto el prefijo 'ih:' si viene en la ruta HLS (ej: ih:HASH)
+        # Si por compatibilidad viene sin prefijo pero tiene longitud de infohash, se lo podemos asegurar o dejar como venga
+        if not hls_path.startswith('ih:') and not hls_path.startswith('cid:') and len(hls_path.split('/')[0]) == 40:
+            hls_path = f"ih:{hls_path}"
+            
         outpace_url = f"http://127.0.0.1:{outpace_port}/streams/ace/{hls_path}"
         params = request.args.to_dict()
         
@@ -278,4 +292,4 @@ class HLSStreamProxy(Resource):
                 content_type=req.headers.get('content-type', 'application/vnd.apple.mpegurl')
             )
         except requests.exceptions.RequestException as e:
-            return Response(f"Error conectando con el motor Outpace (HLS): {str(e)}", status=502)
+            return Response(f"Error connecting to the Outpace engine (HLS): {str(e)}", status=502)

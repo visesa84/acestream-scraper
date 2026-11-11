@@ -15,6 +15,8 @@ RUN cargo install --path boringtun-cli
 FROM python:3.10-slim AS builder-outpace
 RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip jq
 
+COPY outpace_fix/ /tmp/outpace_fix/
+
 RUN echo "import platform" > /tmp/download.py && \
     echo "import urllib.request" >> /tmp/download.py && \
     echo "import json" >> /tmp/download.py && \
@@ -69,6 +71,38 @@ RUN echo "import platform" > /tmp/download.py && \
 
 RUN python3 /tmp/download.py && rm /tmp/download.py
 
+# Verificación de versión y reemplazo condicional en Bash
+RUN set -ex; \
+    VERSION_OUTPUT=$(outpace --version || true); \
+    echo "Salida de versión: $VERSION_OUTPUT"; \
+    CLEAN_VERSION=$(echo "$VERSION_OUTPUT" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true); \
+    echo "Versión limpia extraída: ${CLEAN_VERSION:-desconocida}"; \
+    version_lte() { \
+        [ "$1" = "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" ]; \
+    }; \
+    APPLY_FIX=false; \
+    if [ -z "$CLEAN_VERSION" ]; then \
+        echo "No se pudo determinar la versión. Aplicando fix por seguridad."; \
+        APPLY_FIX=true; \
+    elif version_lte "$CLEAN_VERSION" "0.9.0"; then \
+        echo "La versión ($CLEAN_VERSION) es inferior o igual a 0.9.0."; \
+        APPLY_FIX=true; \
+    else \
+        echo "La versión ($CLEAN_VERSION) es superior a 0.9.0. Se mantiene la descargada."; \
+    fi; \
+    if [ "$APPLY_FIX" = true ]; then \
+        FIX_PATH="/tmp/outpace_fix/outpace_arm64"; \
+        if [ -f "$FIX_PATH" ]; then \
+            echo "Sustituyendo binario por $FIX_PATH..."; \
+            cp "$FIX_PATH" "/usr/local/bin/outpace"; \
+            chmod +x "/usr/local/bin/outpace"; \
+            echo "¡Sustitución completada con éxito!"; \
+        else \
+            echo "ERROR: No se encuentra el archivo de parche en $FIX_PATH"; \
+            exit 1; \
+        fi; \
+    fi
+
 # --- STAGE 2: Descarga del binario precompilado de Kubo desde GitHub ---
 FROM builder-outpace AS builder-kubo
 RUN apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -86,7 +120,7 @@ FROM --platform=linux/arm64 python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with ZeroNet support" \
-      version="2.2.2"
+      version="2.3"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -157,6 +191,7 @@ ENV ENABLE_TOR=false
 ENV WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
 ENV WG_THREADS=4
 ENV ENABLE_WARP=false
+ENV ENABLE_ACESTREAM_SEARCH=true
 ENV ENABLE_IPFS=true
 ENV CONTAINER_NETWORK_MODE=host
 ENV WARP_LICENSE_KEY=

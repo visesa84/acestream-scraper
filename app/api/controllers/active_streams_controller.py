@@ -22,7 +22,7 @@ class ActiveStreamsResource(Resource):
                 streams_list = data.get('streams', [])
                 
                 for stream in streams_list:
-                    stream_id = stream.get('id')
+                    stream_id = stream.get('id') or stream.get('infohash') or stream.get('content_id')
                     metadata = stream.get('metadata', {})
                     title = metadata.get('title', 'Unknown Channel')
                     
@@ -32,12 +32,21 @@ class ActiveStreamsResource(Resource):
                     
                     if stream_id:
                         try:
-                            # Limpiamos el ID por si trae prefijos como 'cid:' u otros formatos
-                            clean_id = stream_id.replace('cid:', '').strip()
+                            # Limpiamos prefijos como 'ih:' o 'cid:' para obtener el hash puro
+                            clean_id = str(stream_id).replace('ih:', '').replace('cid:', '').strip()
+                            
+                            # Determinamos si el stream usa infohash o content_id tradicional
+                            is_infohash = str(stream_id).startswith('ih:') or len(clean_id) == 40
+                            
+                            params = {'format': 'json'}
+                            if is_infohash:
+                                params['infohash'] = clean_id
+                            else:
+                                params['content_id'] = clean_id
                             
                             getstream_resp = requests.get(
                                 f"{ace_url}/ace/getstream",
-                                params={'format': 'json', 'content_id': clean_id},
+                                params=params,
                                 timeout=2
                             )
                             current_app.logger.info(f"Getstream response for {clean_id}: status {getstream_resp.status_code}")
@@ -61,7 +70,7 @@ class ActiveStreamsResource(Resource):
                             current_app.logger.error(f"Error fetching telemetry for stream {stream_id}: {inner_err}")
 
                     sessions.append({
-                        'channel_id': clean_id,
+                        'channel_id': stream_id,
                         'title': title,
                         'speed_down': speed_down,
                         'peers': peers,

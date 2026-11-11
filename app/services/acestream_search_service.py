@@ -13,8 +13,8 @@ class AcestreamSearchService:
     
     def __init__(self, engine_url: str = None):
         """Initialize search service with fixed engine URL."""
-        # Variable fija apuntando al motor oficial aislado en el puerto 6880
-        self.engine_url = "http://localhost:6880"
+        # URL actualizada para la búsqueda en AceStream
+        self.engine_url = "https://search.acestream.net"
         
         logger.debug(f"Acestream Search Service initialized with fixed engine URL: {self.engine_url}")
     
@@ -32,36 +32,47 @@ class AcestreamSearchService:
             Dict containing search results, pagination info, and status
         """
         try:
-            search_url = f"{self.engine_url}/search"
+            # Endpoint raíz con los parámetros solicitados
+            search_url = self.engine_url
             api_page = page - 1
             
             params = {
+                'method': 'search',
                 'query': query,
+                'api_version': 1,
+                'api_key': 'test_api_key',
                 'page': api_page,
-                'page_size': page_size
+                'page_size': page_size,
+                'show_epg': 1
             }
             
             if category:
                 params['category'] = category
             
-            response = requests.get(search_url, params=params, timeout=10)
+            headers = {
+                'User-Agent': 'AceStream/3.1'
+            }
+            
+            # allow_redirects=True para manejar el 301 Moved Permanently hacia api.acestream.me
+            response = requests.get(search_url, params=params, headers=headers, allow_redirects=True, timeout=10)
             logger.info(f"Search API response status code: {response.status_code}")
             
             if response.status_code == 200:
                 raw_response = response.text
                 try:
                     search_data = response.json()
-                    api_result = search_data.get('result', {})
-                    raw_results = api_result.get('results', [])
-                    total_results = api_result.get('total', 0)
+                    # Adaptado al nuevo formato JSON plano de la API de AceStream
+                    raw_results = search_data.get('results', [])
+                    total_results = search_data.get('total', 0)
                     
                     processed_results = []
                     for result in raw_results:
                         if 'items' in result and isinstance(result['items'], list) and len(result['items']) > 0:
                             for item in result['items']:
+                                infohash = item.get('infohash')
                                 processed_item = {
                                     'name': result.get('name', 'Unnamed Channel'),
-                                    'id': self.get_content_id(item.get('infohash')),
+                                    'id': infohash,  # Se asigna directamente el infohash como id
                                     'categories': item.get('categories', []),
                                     'bitrate': item.get('bitrate', 0)
                                 }
@@ -123,21 +134,32 @@ class AcestreamSearchService:
         
         while current_page <= total_pages and current_page <= max_pages:
             try:
-                search_url = f"{self.engine_url}/search"
+                search_url = self.engine_url
                 api_page = current_page - 1
                 
-                params = {'query': query, 'page': api_page, 'page_size': page_size}
+                params = {
+                    'method': 'search',
+                    'query': query,
+                    'api_version': 1,
+                    'api_key': 'test_api_key',
+                    'page': api_page,
+                    'page_size': page_size,
+                    'show_epg': 1
+                }
                 if category:
                     params['category'] = category
                 
-                response = requests.get(search_url, params=params, timeout=10)
+                headers = {
+                    'User-Agent': 'AceStream/3.1'
+                }
+                
+                response = requests.get(search_url, params=params, headers=headers, allow_redirects=True, timeout=10)
                 if response.status_code != 200:
                     break
                     
                 search_data = response.json()
-                api_result = search_data.get('result', {})
-                raw_results = api_result.get('results', [])
-                total_results = api_result.get('total', 0)
+                raw_results = search_data.get('results', [])
+                total_results = search_data.get('total', 0)
                 
                 if total_results > 0 and page_size > 0:
                     total_pages = (total_results + page_size - 1) // page_size
@@ -145,12 +167,12 @@ class AcestreamSearchService:
                 for result in raw_results:
                     if 'items' in result and isinstance(result['items'], list) and len(result['items']) > 0:
                         for item in result['items']:
-                            content_id = self.get_content_id(item.get('infohash'))
-                            if content_id and content_id not in seen_ids:
-                                seen_ids.add(content_id)
+                            infohash = item.get('infohash')
+                            if infohash and infohash not in seen_ids:
+                                seen_ids.add(infohash)
                                 processed_item = {
                                     'name': result.get('name', 'Unnamed Channel'),
-                                    'id': content_id,
+                                    'id': infohash,  # Se asigna directamente el infohash como id
                                     'categories': item.get('categories', []),
                                     'bitrate': item.get('bitrate', 0)
                                 }
@@ -161,10 +183,9 @@ class AcestreamSearchService:
                     else:
                         result_id = result.get('infohash', result.get('id', ''))
                         if result_id:
-                            content_id = self.get_content_id(result_id) if len(result_id) != 40 else result_id
-                            if content_id and content_id not in seen_ids:
-                                seen_ids.add(content_id)
-                                result['id'] = content_id
+                            if result_id not in seen_ids:
+                                seen_ids.add(result_id)
+                                result['id'] = result_id
                                 all_processed_results.append(result)
 
                 current_page += 1
@@ -184,19 +205,5 @@ class AcestreamSearchService:
         return None
     
     def get_content_id(self, infohash: str) -> Optional[str]:
-        try:
-            url = f"{self.engine_url}/server/api"
-            params = {
-                "api_version": 3,
-                "method": "get_content_id",
-                "infohash": infohash
-            }
-            response = requests.get(url, params=params, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("result", {}).get("content_id")
-            else:
-                logger.error(f"Failed to get content_id for infohash {infohash}: status {response.status_code}")
-        except Exception as e:
-            logger.error(f"Exception in get_content_id for infohash {infohash}: {e}")
-        return None
+        # Método adaptado para devolver directamente el infohash al no admitirlo el nuevo motor
+        return infohash

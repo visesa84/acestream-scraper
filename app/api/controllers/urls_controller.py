@@ -86,7 +86,7 @@ class URLList(Resource):
                     try:
                         fcntl.flock(lock_file, fcntl.LOCK_EX)
                     except Exception as flock_err:
-                        logger.warning(f"No se pudo adquirir el cerrojo exclusivo: {flock_err}")
+                        logger.warning(f"Could not acquire the exclusive lock: {flock_err}")
 
                     try:
                         search_service = AcestreamSearchService()
@@ -131,13 +131,23 @@ class URLList(Resource):
                                 if not isinstance(res, dict):
                                     continue
                                     
-                                content_id = res.get('content_id') or res.get('id') or res.get('acestream_id')
+                                raw_id = res.get('content_id') or res.get('id') or res.get('acestream_id') or res.get('infohash')
+                                if not raw_id:
+                                    continue
+
+                                # Asegurar que el identificador lleve el prefijo 'ih:'
+                                clean_raw_id = str(raw_id).strip()
+                                if clean_raw_id.startswith('ih:'):
+                                    channel_id = clean_raw_id
+                                else:
+                                    channel_id = f"ih:{clean_raw_id}"
+
                                 raw_name = res.get('name') or input_text
                                 channel_name = clean_channel_name(raw_name)
                                 
-                                if content_id and content_id not in seen_ids:
+                                if channel_id not in seen_ids:
                                     name_lower = channel_name.lower().strip()
-                                    id_lower = content_id.lower().strip()
+                                    id_lower = channel_id.lower().strip()
 
                                     # Filtrado de Blacklist Global
                                     is_blacklisted = any(
@@ -146,14 +156,14 @@ class URLList(Resource):
                                     )
 
                                     if is_blacklisted:
-                                        logger.info(f"[Blacklist] Skipping channel: '{channel_name}' (ID: {content_id})")
+                                        logger.info(f"[Blacklist] Skipping channel: '{channel_name}' (ID: {channel_id})")
                                         ignored_count += 1
                                         continue
 
-                                    seen_ids.add(content_id)
+                                    seen_ids.add(channel_id)
                                     
                                     channel_repo.update_or_create(
-                                        channel_id=content_id,
+                                        channel_id=channel_id,
                                         name=channel_name,
                                         source_url=virtual_url,
                                         metadata=res.get('metadata') or {}
@@ -164,7 +174,7 @@ class URLList(Resource):
                             channel_repo.commit()
                         except Exception as db_err:
                             db.session.rollback()
-                            logger.warning(f"Conflicto de concurrencia al guardar transacciones duplicadas: {db_err}")
+                            logger.warning(f"Concurrency conflict when saving duplicate transactions: {db_err}")
 
                         return {
                             'message': f'Search complete. Added {added_count} channels ({ignored_count} ignored by blacklist) for "{input_text}"',

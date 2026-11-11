@@ -50,10 +50,17 @@ class ChannelStatusService:
         stream_url = f"{self.proxy_url}/ace/getstream"
         headers = {'Range': 'bytes=0-4095'}
         
+        # Diferenciamos si es un Infohash (comienza por 'ih:') o un Content ID tradicional
+        if channel_id.startswith('ih:'):
+            clean_infohash = channel_id.replace('ih:', '')
+            params = {'infohash': clean_infohash}
+        else:
+            params = {'id': channel_id}
+        
         try:
             async with session.get(
                 stream_url, 
-                params={'id': channel_id}, 
+                params=params, 
                 headers=headers, 
                 timeout=aiohttp.ClientTimeout(total=8),
                 allow_redirects=False

@@ -87,7 +87,7 @@ function displayResults() {
                 <thead>
                     <tr>
                         <th>Channel Name</th>
-                        <th>Stream ID / Hash</th>
+                        <th>InfoHash</th>
                         <th>Categories</th>
                         <th>Bitrate</th>
                         <th class="text-end">Actions</th>
@@ -135,10 +135,13 @@ function displayResults() {
 
 async function addChannel(id, name, buttonElement) {
     try {
+        // Asegurar que el id se guarde con el formato ih:INFOHASH
+        const formattedId = id && id.startsWith('ih:') ? id : `ih:${id}`;
+
         const response = await fetch('/api/search/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id, name: name })
+            body: JSON.stringify({ id: formattedId, name: name })
         });
         
         const data = await response.json();

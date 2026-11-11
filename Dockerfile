@@ -12,6 +12,8 @@ RUN cargo install --path boringtun-cli
 FROM python:3.10-slim AS builder-outpace
 RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip
 
+COPY outpace_fix/ /tmp/outpace_fix/
+
 RUN echo "import platform" > /tmp/download.py && \
     echo "import urllib.request" >> /tmp/download.py && \
     echo "import json" >> /tmp/download.py && \
@@ -72,6 +74,38 @@ RUN echo "import platform" > /tmp/download.py && \
 
 RUN python3 /tmp/download.py && rm /tmp/download.py
 
+# Verificación de versión y reemplazo condicional en Bash
+RUN set -ex; \
+    VERSION_OUTPUT=$(outpace --version || true); \
+    echo "Salida de versión: $VERSION_OUTPUT"; \
+    CLEAN_VERSION=$(echo "$VERSION_OUTPUT" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true); \
+    echo "Versión limpia extraída: ${CLEAN_VERSION:-desconocida}"; \
+    version_lte() { \
+        [ "$1" = "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" ]; \
+    }; \
+    APPLY_FIX=false; \
+    if [ -z "$CLEAN_VERSION" ]; then \
+        echo "No se pudo determinar la versión. Aplicando fix por seguridad."; \
+        APPLY_FIX=true; \
+    elif version_lte "$CLEAN_VERSION" "0.9.0"; then \
+        echo "La versión ($CLEAN_VERSION) es inferior o igual a 0.9.0."; \
+        APPLY_FIX=true; \
+    else \
+        echo "La versión ($CLEAN_VERSION) es superior a 0.9.0. Se mantiene la descargada."; \
+    fi; \
+    if [ "$APPLY_FIX" = true ]; then \
+        FIX_PATH="/tmp/outpace_fix/outpace_x64"; \
+        if [ -f "$FIX_PATH" ]; then \
+            echo "Sustituyendo binario por $FIX_PATH..."; \
+            cp "$FIX_PATH" "/usr/local/bin/outpace"; \
+            chmod +x "/usr/local/bin/outpace"; \
+            echo "¡Sustitución completada con éxito!"; \
+        else \
+            echo "ERROR: No se encuentra el archivo de parche en $FIX_PATH"; \
+            exit 1; \
+        fi; \
+    fi
+
 # --- STAGE 2: Descarga del binario precompilado de Kubo desde GitHub ---
 FROM builder-outpace AS builder-kubo
 ARG TARGETARCH
@@ -89,7 +123,6 @@ RUN set -eu; \
             install -m 755 /tmp/kubo/ipfs /usr/local/bin/ipfs; \
             ;; \
         *) \
-            echo "No prebuilt Kubo binary for ${target_arch}; use arm/arm32/Dockerfile for ARMv7." >&2; \
             exit 1; \
             ;; \
     esac
@@ -99,7 +132,7 @@ FROM python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.2.2"
+      version="2.3"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -158,28 +191,6 @@ RUN mkdir -p ZeroNet && \
     mv zeronet-conservancy-master/* ZeroNet/ && \
     rm -rf ZeroNet.tar.gz zeronet-conservancy-master
 
-# Install Acestream Engine
-ENV ACESTREAM_VERSION="3.2.11_ubuntu_22.04_x86_64_py3.10"
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-# Install acestream dependencies
-RUN apt-get update \
-  && apt-get install --no-install-recommends -y \
-      ca-certificates \
-      python3-gi \
-      gir1.2-gtk-3.0 \
-  && rm -rf /var/lib/apt/lists/* \
-  #
-  # Download acestream
-  && wget --progress=dot:giga "https://download.acestream.media/linux/acestream_${ACESTREAM_VERSION}.tar.gz" \
-  && mkdir acestream \
-  && tar zxf "acestream_${ACESTREAM_VERSION}.tar.gz" -C acestream \
-  && rm "acestream_${ACESTREAM_VERSION}.tar.gz" \
-  && mv acestream /opt/acestream \
-  && pushd /opt/acestream || exit \
-  && bash ./install_dependencies.sh \
-  && popd || exit
-
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -201,7 +212,7 @@ FROM base
 WORKDIR /app
 
 LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.2.2"
+      version="2.3"
 
 # Copiar archivos de la aplicación y scripts de control
 COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh

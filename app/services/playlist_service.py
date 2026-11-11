@@ -65,7 +65,11 @@ class PlaylistService:
         stream_mode = getattr(self.config, 'stream_mode', 'traditional')
 
         if stream_mode == 'hls':
-            return f"{host}/streams/ace/cid:{channel_id}.m3u8"
+            # Si el ID ya lleva el prefijo 'ih:', lo usamos tal cual sin anteponer 'cid:'
+            if channel_id.startswith('ih:'):
+                return f"{host}/streams/ace/{channel_id}.m3u8"
+            else:
+                return f"{host}/streams/ace/cid:{channel_id}.m3u8"
         else:
             return f"{host}/ace/getstream?id={channel_id}"
 

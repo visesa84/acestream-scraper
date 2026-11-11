@@ -173,18 +173,7 @@ def create_app(test_config=None):
         except Exception as e:
             logger.error(f"Error in inject_config auth: {e}")
 
-        # --- LÓGICA MULTI-ARQUITECTURA ---
-        arch = platform.machine().lower()
-        # Comprobamos si estamos en una arquitectura ARM (arm64/aarch64 o armv7)
-        is_arm = arch in ('aarch64', 'armv7l', 'armv7') or arch.startswith('arm')
-
-        if is_arm:
-            # En ARM64 / ARMv7 el buscador no existe, se fuerza siempre a oculto
-            enable_search = False
-        else:
-            # En AMD64 (x86_64) se respeta la variable de entorno del Dockerfile (por defecto false)
-            enable_search = os.environ.get('ENABLE_ACESTREAM_SEARCH', 'false').lower() == 'true'
-        # ---------------------------------
+        enable_search = os.environ.get('ENABLE_ACESTREAM_SEARCH', 'false').lower() == 'true'
 
         return {
             'enable_acestream_search': enable_search,

@@ -53,15 +53,46 @@ async function getBaseUrl() {
 }
 
 // Open the player options modal for a stream
-// Open the player options modal for a stream
 async function showPlayerOptions(streamId) {
     if (!streamId) {
         console.error('No stream ID provided to showPlayerOptions');
         return;
     }
     
-    const baseUrl = await getBaseUrl();
-    const fullStreamUrl = `${baseUrl}${streamId}`;
+    let fullStreamUrl;
+    const currentOrigin = window.location.origin;
+    
+    // Comprobamos si el streamId contiene o empieza por "ih:" (ej: ih:05602347...)
+    if (streamId.toString().startsWith('ih:') || streamId.toString().includes('ih:')) {
+        // Extraemos el infohash quitando el prefijo "ih:"
+        const infoHash = streamId.replace(/^.*ih:/, '');
+        
+        // Intentamos obtener la base configurada o usamos el origen actual
+        let baseUrlConfig = '';
+        try {
+            const response = await fetch('/api/config/base_url');
+            const data = await response.json();
+            if (data.base_url && data.base_url.trim() !== '') {
+                baseUrlConfig = data.base_url.trim().replace(/\/$/, '');
+            }
+        } catch (e) {
+            console.error('Error fetching base URL for infohash:', e);
+        }
+
+        let baseEndpoint = currentOrigin;
+        if (baseUrlConfig.startsWith('http://') || baseUrlConfig.startsWith('https://')) {
+            // Extraemos la raíz del dominio configurado (ej: http://192.168.1.50:8000)
+            const urlObj = new URL(baseUrlConfig);
+            baseEndpoint = urlObj.origin;
+        }
+        
+        // Construimos correctamente la ruta para infohash
+        fullStreamUrl = `${baseEndpoint}/ace/getstream?infohash=${infoHash}`;
+    } else {
+        // Comportamiento original intacto para Content ID
+        const baseUrl = await getBaseUrl();
+        fullStreamUrl = `${baseUrl}${streamId}`;
+    }
     
     // Create the modal HTML
     const modalHTML = `
@@ -153,7 +184,6 @@ function startAceJSPlayer(fullStreamUrl) {
             });
 
             // Limpieza: Si cierras el modal, hay que destruir el player
-            // Puedes disparar este evento al cerrar el modal de Flask
             const observer = new MutationObserver((mutations) => {
                 if (!document.body.contains(container) || container.style.display === 'none') {
                     player.pause();

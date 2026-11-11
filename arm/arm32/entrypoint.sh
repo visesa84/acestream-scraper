@@ -134,7 +134,7 @@ start_outpace_main() {
     export OUTPACE_RTMP_BIND=0.0.0.0:1935
     export OUTPACE_PEER_LISTEN=0.0.0.0:8621
     export OUTPACE_DATA_DIR=/root/.local/share/outpace
-    export OUTPACE_EXPERIMENTAL_ACE_COMPAT=1
+    export OUTPACE_ACE_COMPAT=1
     export OUTPACE_MAX_ACTIVE_UPSTREAMS=6
     export OUTPACE_MAX_PARALLEL_CONNECT=16
     export OUTPACE_REQUEST_TIMEOUT_MS=3500
@@ -152,7 +152,7 @@ start_outpace_check_stream() {
     unset OUTPACE_RTMP_BIND
     export OUTPACE_PEER_LISTEN=0.0.0.0:8622
     export OUTPACE_DATA_DIR=/root/.local/share/outpace_check
-    export OUTPACE_EXPERIMENTAL_ACE_COMPAT=1
+    export OUTPACE_ACE_COMPAT=1
     export OUTPACE_MAX_ACTIVE_UPSTREAMS=4
     export OUTPACE_MAX_PARALLEL_CONNECT=8
     export OUTPACE_REQUEST_TIMEOUT_MS=3500
@@ -190,8 +190,6 @@ start_outpace_check_stream
 
 sleep 3
 echo "Outpace engine startup log: $LOG_DIR/outpace.log"
-
-export ENABLE_ACESTREAM_SEARCH=false
 
 # Start ZeroNet in the background
 cd /app/ZeroNet

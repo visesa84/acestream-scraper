@@ -239,7 +239,7 @@ function updateChannelList(channels) {
                     ${channel.name}
                 </div>
             </td>
-            <!-- Columna 2: Stream ID / Hash -->
+            <!-- Columna 2: Content ID / InfoHash -->
             <td><code>${channel.id}</code></td>
             <!-- Columna 3: Status / Info -->
             <td>

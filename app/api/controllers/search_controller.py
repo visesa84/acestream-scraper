@@ -89,8 +89,6 @@ class Search(Resource):
             page_size = int(request.args.get('page_size', 10))
             category = request.args.get('category', '')
             
-            # Removed the check for empty query to make it optional
-            
             # Perform search
             search_results = self.search_service.search(query, page, page_size, category)
             
@@ -109,8 +107,6 @@ class AddChannel(Resource):
         super().__init__(*args, **kwargs)
         self.search_service = AcestreamSearchService()
         self.channel_repo = ChannelRepository()
-        from app.repositories import URLRepository
-        self.url_repo = URLRepository()
         
     @api.doc('add_channel')
     @api.expect(add_channel_request_model)
@@ -144,19 +140,12 @@ class AddChannel(Resource):
                     'channel': existing_channel.to_dict()
                 }, 409
             
-            # Create or get the Acestream Search URL entry
-            acestream_search_url = self.url_repo.get_or_create_by_type_and_url(
-                url_type="search",
-                url="Acestream Search",
-                trigger_scrape=False  # This type shouldn't trigger a scrape
-            )
-            
-            # Create new channel with the scraped_url_id
+            # Create new channel directly without forcing a dummy search URL entry
             new_channel = AcestreamChannel(
                 id=channel_id, 
                 name=channel_name, 
                 source_url="Acestream Search",  # Keep descriptive source
-                scraped_url_id=acestream_search_url.id  # Link to the scraped URL
+                scraped_url_id=None
             )
             
             self.channel_repo.add(new_channel)
@@ -177,8 +166,6 @@ class AddMultipleChannels(Resource):
         super().__init__(*args, **kwargs)
         self.search_service = AcestreamSearchService()
         self.channel_repo = ChannelRepository()
-        from app.repositories import URLRepository
-        self.url_repo = URLRepository()
         
     @api.doc('add_multiple_channels')
     @api.expect(add_multiple_request_model)
@@ -198,13 +185,6 @@ class AddMultipleChannels(Resource):
             if not channels or not isinstance(channels, list):
                 return {'success': False, 'message': 'No channels provided or invalid format'}, 400
             
-            # Create or get the Acestream Search URL entry
-            acestream_search_url = self.url_repo.get_or_create_by_type_and_url(
-                url_type="search",
-                url="Acestream Search",
-                trigger_scrape=False  # This type shouldn't trigger a scrape
-            )
-            
             added_channels = []
             existing_channels = []
             
@@ -221,12 +201,12 @@ class AddMultipleChannels(Resource):
                     existing_channels.append(existing_channel.to_dict())
                     continue
                 
-                # Create new channel with the scraped_url_id
+                # Create new channel directly without forcing a dummy search URL entry
                 new_channel = AcestreamChannel(
                     id=channel_id, 
                     name=channel_name,
                     source_url="Acestream Search",  # Keep descriptive source
-                    scraped_url_id=acestream_search_url.id  # Link to the scraped URL
+                    scraped_url_id=None
                 )
                 
                 self.channel_repo.add(new_channel)

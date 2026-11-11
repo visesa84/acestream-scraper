@@ -58,11 +58,22 @@ class ScraperService:
                 for res in results_list:
                     if not isinstance(res, dict):
                         continue
-                    content_id = res.get('content_id') or res.get('id') or res.get('acestream_id')
+                    
+                    raw_id = res.get('content_id') or res.get('id') or res.get('acestream_id') or res.get('infohash')
+                    if not raw_id:
+                        continue
+
+                    # Aseguramos que el identificador lleve siempre el prefijo 'ih:'
+                    clean_raw_id = str(raw_id).strip()
+                    if clean_raw_id.startswith('ih:'):
+                        content_id = clean_raw_id
+                    else:
+                        content_id = f"ih:{clean_raw_id}"
+
                     name = res.get('name') or query.upper()
                     metadata = res.get('metadata') or {}
-                    if content_id:
-                        links.append((content_id, name, metadata))
+                    
+                    links.append((content_id, name, metadata))
 
                 self._update_channels(url, links)
                 self.url_repository.update_status(url, 'ok')
@@ -129,14 +140,12 @@ class ScraperService:
                 ch.id for ch in self.channel_repository.get_by_source(url)
             )
             
-            # Si la búsqueda devuelve 0 resultados (por ejemplo, por un timeout o caída del motor),
-            # no borramos los canales existentes para evitar vaciar la tabla por error.
+            # Si la búsqueda devuelve 0 resultados, no borramos los canales existentes para evitar vaciar la tabla por error.
             if not filtered_links and existing_channels:
                 logger.warning(f"[Scraper] Received 0 links for URL '{url}' but found {len(existing_channels)} existing channels. Skipping deletion safeguard to prevent data loss.")
             else:
                 current_channels = set(channel_id for channel_id, _, _ in filtered_links)
                 
-                # Remove old channels only if we got a valid response or empty on purpose
                 channels_to_remove = existing_channels - current_channels
                 for cid in channels_to_remove:
                     self.channel_repository.delete(cid)
