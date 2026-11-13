@@ -15,7 +15,6 @@ RUN cargo install --path boringtun-cli
 FROM --platform=linux/arm64 python:3.10-slim AS builder-outpace
 RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip jq
 
-COPY outpace_fix/ /tmp/outpace_fix/
 RUN mkdir -p /tmp/licenses_outpace
 
 RUN set -eu; \

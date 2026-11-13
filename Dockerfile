@@ -13,7 +13,6 @@ FROM python:3.10-slim AS builder-outpace
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates tar gzip unzip && rm -rf /var/lib/apt/lists/*
 
-COPY outpace_fix/ /tmp/outpace_fix/
 RUN mkdir -p /tmp/licenses_outpace
 
 RUN set -eu; \
