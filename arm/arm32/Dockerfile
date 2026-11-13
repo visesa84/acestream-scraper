@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip jq
 RUN mkdir -p /tmp/licenses_outpace
 
 RUN set -eu; \
-    release="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: Acestream-Scraper-Client' https://api.github.com/repos/jamezrin/outpace-stream/releases/latest)"; \
+    release="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: Acestream-Scraper-Client' https://api.github.com/repos/outpace-stream/outpace-engine/releases/latest)"; \
     target_arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
     \
     # Mapeo ampliado para capturar arm, armv7, armhf o aarch32
@@ -103,7 +103,7 @@ FROM --platform=linux/arm/v7 python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with ZeroNet support" \
-      version="2.3.1"
+      version="2.3.2"
 
 WORKDIR /app
 RUN mkdir -p /app/config

@@ -289,6 +289,46 @@ function setupConfigEvents() {
     }
 }
 
+async function loadAudioNormalizeConfig() {
+    try {
+        const response = await fetch('/api/config/audio_normalize');
+        if (response.ok) {
+            const data = await response.json();
+            const checkbox = document.getElementById('audioNormalizeSwitch');
+            if (checkbox) checkbox.checked = !!data.audio_normalize;
+        }
+    } catch (err) {
+        console.error('Error loading audio normalize config:', err);
+    }
+}
+
+document.getElementById('audioNormalizeSwitch')?.addEventListener('change', async function() {
+    const enabled = this.checked ? 1 : 0;
+    
+    try {
+        showLoading();
+        const response = await fetch('/api/config/audio_normalize', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio_normalize: enabled })
+        });
+        
+        if (response.ok) {
+            console.log('Audio normalization updated. Outpace is restarting...');
+        } else {
+            alert('Error updating configuration');
+            this.checked = !this.checked; // Revertir si hay error
+        }
+    } catch (err) {
+        console.error('Error:', err);
+        this.checked = !this.checked;
+    } finally {
+        hideLoading();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', loadAudioNormalizeConfig);
+
 document.addEventListener('DOMContentLoaded', function() {
     loadConfigData();
     setupConfigEvents();

@@ -46,6 +46,16 @@ trap cleanup INT TERM EXIT
 export ENABLE_WARP=${ENABLE_WARP:-false}
 export ENABLE_ACESTREAM_SEARCH=true
 
+# Run database migrations before starting the app
+cd /app
+echo "Running database migrations..."
+python manage.py upgrade >> "$LOG_DIR/migrations.log" 2>&1
+if [ $? -ne 0 ]; then
+    echo "WARNING: Database migration failed — check $LOG_DIR/migrations.log"
+else
+    echo "Database migrations completed successfully."
+fi
+
 # Initialize WARP if enabled
 if [ "${ENABLE_WARP}" = "true" ]; then
     echo "Initializing Cloudflare WARP..."
@@ -130,6 +140,29 @@ if [ "$ENABLE_IPFS" = "true" ]; then
 fi
 
 start_outpace_main() {
+	cd /app
+	
+    AUDIO_NORMALIZE=$(python3 -c "
+import os, sys
+os.environ.setdefault('FLASK_APP', 'manage.py')
+try:
+    from app import create_app
+    from app.repositories import SettingsRepository
+    app = create_app()
+    with app.app_context():
+        repo = SettingsRepository()
+        val = repo.get('outpace_live_audio_normalize', '0')
+        if not val or not str(val).strip():
+            print('0')
+        else:
+            print(str(val).strip())
+except Exception as e:
+    print('0')
+" 2>/dev/null | tr -d '[:space:]')
+    
+    echo "Outpace audio normalization loaded from DB: [${AUDIO_NORMALIZE}]"
+    export OUTPACE_LIVE_AUDIO_NORMALIZE=${AUDIO_NORMALIZE:-0}
+    
     export OUTPACE_BIND=0.0.0.0:6878
     export OUTPACE_RTMP_BIND=0.0.0.0:1935
     export OUTPACE_PEER_LISTEN=0.0.0.0:8621
@@ -142,11 +175,11 @@ start_outpace_main() {
     export OUTPACE_READ_TIMEOUT_MS=10000
     export OUTPACE_CACHE_SIZE_MB=128
     export OUTPACE_MAX_CONNECTIONS_PER_STREAM=35
-	export OUTPACE_ENABLE_INBOUND=1
-	export OUTPACE_ENABLE_SEEDING=1
-	export OUTPACE_CACHE_TYPE=memory
-	export OUTPACE_CACHE_DIR=/root/.local/share/outpace/cache
-	export OUTPACE_SEED_STORE_BYTES=134217728
+    export OUTPACE_ENABLE_INBOUND=1
+    export OUTPACE_ENABLE_SEEDING=1
+    export OUTPACE_CACHE_TYPE=memory
+    export OUTPACE_CACHE_DIR=/root/.local/share/outpace/cache
+    export OUTPACE_SEED_STORE_BYTES=134217728
 
     outpace serve >> "$LOG_DIR/outpace.log" 2>&1 &
     OUTPACE_PID=$!
@@ -213,19 +246,9 @@ echo "ZeroNet logs available at $LOG_DIR/zeronet.log"
 echo "Waiting for ZeroNet to initialize..."
 sleep 10
 
-# Run database migrations before starting the app
-cd /app
-echo "Running database migrations..."
-python manage.py upgrade >> "$LOG_DIR/migrations.log" 2>&1
-if [ $? -ne 0 ]; then
-    echo "WARNING: Database migration failed — check $LOG_DIR/migrations.log"
-else
-    echo "Database migrations completed successfully."
-fi
-
 # Start Flask app with Gunicorn
 echo "Starting Flask application on port $FLASK_PORT..."
-gunicorn --bind "0.0.0.0:$FLASK_PORT" \
+gunicorn --chdir /app --bind "0.0.0.0:$FLASK_PORT" \
     --workers 4 \
     --threads 4 \
     --worker-class gthread \

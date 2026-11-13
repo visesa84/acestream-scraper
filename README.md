@@ -144,7 +144,7 @@ This project uses Flask, SQLAlchemy, BeautifulSoup, Outpace, Kubo, ZeroNet, FFmp
 
 Special thanks to the developers of Flask, BeautifulSoup, SQLAlchemy, and other dependencies used in this project.
 - [Acestream-scrapper](https://github.com/Pipepito/acestream-scraper) - Enhanced Acestream Scraper interface
-- [Outpace](https://github.com/jamezrin/outpace) - AceStream reimplementation in Rust
+- [Outpace](https://github.com/outpace-stream/outpace-engine) - AceStream reimplementation in Rust
 - [Kubo](https://github.com/ipfs/kubo) - IPFS implementation
 
 ## License & Open Source Components

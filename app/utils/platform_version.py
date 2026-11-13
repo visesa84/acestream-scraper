@@ -66,7 +66,7 @@ def check_outpace_github_updates():
 
     try:
         # 1. Consultar la API oficial de GitHub Releases
-        api_url = "https://api.github.com/repos/jamezrin/outpace/releases/latest"
+        api_url = "https://api.github.com/repos/outpace-stream/outpace-engine/releases/latest"
         headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "Acestream-Scraper-Client"

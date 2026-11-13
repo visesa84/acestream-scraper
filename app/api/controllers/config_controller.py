@@ -29,6 +29,10 @@ checkstatus_interval_model = api.model('CheckStatusInterval', {
     'enabled': fields.Boolean(required=True, description='Whether automatic status check is enabled')
 })
 
+audio_normalize_model = api.model('AudioNormalize', {
+    'audio_normalize': fields.Integer(required=True, description='1 to enable OUTPACE_LIVE_AUDIO_NORMALIZE, 0 to disable')
+})
+
 @api.route('/base_url')
 class BaseURL(Resource):
     def get(self):
@@ -157,4 +161,45 @@ class SetupCompleted(Resource):
             
         except Exception as e:
             logger.error(f"Error updating setup status: {e}")
+            api.abort(500, str(e))
+
+@api.route('/audio_normalize')
+class AudioNormalize(Resource):
+    def get(self):
+        """Get current OUTPACE_LIVE_AUDIO_NORMALIZE status."""
+        try:
+            repo = SettingsRepository()
+            val = repo.get('outpace_live_audio_normalize', '0')
+            return {"audio_normalize": int(val)}, 200
+        except Exception as e:
+            api.abort(500, str(e))
+    
+    @api.doc('update_audio_normalize')
+    @api.expect(audio_normalize_model)
+    def put(self):
+        """Update OUTPACE_LIVE_AUDIO_NORMALIZE and restart Outpace engine."""
+        data = request.json or {}
+        raw_val = data.get('audio_normalize', 0)
+        
+        val_str = '1' if (raw_val is True or raw_val == 1 or raw_val == '1' or raw_val == 'true') else '0'
+        
+        try:
+            repo = SettingsRepository()
+            success = repo.set('outpace_live_audio_normalize', val_str)
+            if not success:
+                api.abort(500, "Error al guardar la normalización de audio en la base de datos.")
+            
+            # Actualizamos la variable de entorno actual
+            os.environ['OUTPACE_LIVE_AUDIO_NORMALIZE'] = val_str
+            
+            # Enviamos señal SIGUSR2 al proceso supervisor para reiniciar Outpace
+            supervisor_pid = os.environ.get('OUTPACE_SUPERVISOR_PID')
+            if supervisor_pid:
+                import signal
+                os.kill(int(supervisor_pid), signal.SIGUSR2)
+                logger.info(f"Sent SIGUSR2 signal to supervisor to restart Outpace with setting: {val_str}")
+            
+            return {"message": "Audio normalization updated and Outpace restart triggered", "audio_normalize": int(val_str)}, 200
+        except Exception as e:
+            logger.error(f"Error updating audio normalization: {e}")
             api.abort(500, str(e))

@@ -13,11 +13,13 @@ class SettingsRepository:
     ACE_ENGINE_URL = 'ace_engine_url'
     RESCRAPE_INTERVAL = 'rescrape_interval'
     SETUP_COMPLETED = 'setup_completed'
+    AUDIO_NORMALIZE = 'outpace_live_audio_normalize'
     
     # Add constants for default values
     DEFAULT_BASE_URL = ''
     DEFAULT_ACE_ENGINE_URL = 'http://localhost:6878'
     DEFAULT_RESCRAPE_INTERVAL = '24'
+    DEFAULT_AUDIO_NORMALIZE = '0'
     
     # Cache for values to use when no app context is available
     _cache = {}
@@ -114,7 +116,8 @@ class SettingsRepository:
         default_settings = {
             self.BASE_URL: self.DEFAULT_BASE_URL,
             self.ACE_ENGINE_URL: self.DEFAULT_ACE_ENGINE_URL,
-            self.RESCRAPE_INTERVAL: self.DEFAULT_RESCRAPE_INTERVAL
+            self.RESCRAPE_INTERVAL: self.DEFAULT_RESCRAPE_INTERVAL,
+            'outpace_live_audio_normalize': '0'
         }
         
         for key, value in default_settings.items():
