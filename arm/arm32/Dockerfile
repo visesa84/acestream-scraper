@@ -13,6 +13,7 @@ RUN cargo install --path boringtun-cli
 
 # --- STAGE 1: Descarga de Outpace desde GitHub ---
 FROM python:3.10-slim AS builder-outpace
+ARG TARGETARCH
 RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip jq
 
 COPY outpace_fix/ /tmp/outpace_fix/
@@ -22,22 +23,27 @@ RUN set -eu; \
     release="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: Acestream-Scraper-Client' https://api.github.com/repos/jamezrin/outpace-stream/releases/latest)"; \
     target_arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
     \
-    # Mapeo exacto para arm32 a la nomenclatura armv7 de GitHub
+    # Mapeo ampliado para capturar arm, armv7, armhf o aarch32
     case "$target_arch" in \
         amd64|x86_64) kw="x86_64" ;; \
         arm64|aarch64) kw="aarch64" ;; \
-        arm|armv7|armv7l) kw="armv7" ;; \
+        arm|armv7|armv7l|armhf) kw="armv7" ;; \
         *) kw="$target_arch" ;; \
     esac; \
     \
-    echo "Buscando asset para la arquitectura clave: $kw"; \
+    echo "Arquitectura detectada: $target_arch -> Clave de búsqueda: $kw"; \
     \
-    # Selección compatible con jq estándar utilizando contains
+    # Selección flexible adaptada para armv7 (busca la clave y que sea tar.gz)
     download_url="$(printf '%s' "$release" | jq -r --arg kw "$kw" \
-        '.assets[]? | select((.name | contains($kw)) and (.name | contains("linux")) and (.name | contains(".tar.gz"))) | .browser_download_url' | head -n 1)"; \
+        '.assets[]? | select((.name | contains($kw)) and (.name | contains(".tar.gz"))) | .browser_download_url' | head -n 1)"; \
     \
     if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then \
-        echo "Error: No se encontró el asset de Linux compatible con $kw."; \
+        echo "Aviso: Búsqueda estricta falló. Intentando buscar cualquier asset armv7..."; \
+        download_url="$(printf '%s' "$release" | jq -r '.assets[]? | select(.name | contains("armv7") or contains("armhf")) | .browser_download_url' | head -n 1)"; \
+    fi; \
+    \
+    if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then \
+        echo "Error crítico: No se encontró ningún asset compatible para armv7 en GitHub."; \
         exit 1; \
     fi; \
     \
