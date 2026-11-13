@@ -178,7 +178,7 @@ function startAceJSPlayer(fullStreamUrl) {
             player.on(mpegts.Events.ERROR, (type, detail, info) => {
                 console.error("Mpegts error:", type, detail, info);
                 container.innerHTML = `<div style="color:white; text-align:center; padding:20px;">
-                    PyAceXY error: The stream is unavailable or CORS is blocked.
+                    The stream is unavailable or has no peers.
                 </div>`;
                 player.destroy();
             });

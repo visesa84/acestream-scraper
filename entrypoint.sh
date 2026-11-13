@@ -27,7 +27,6 @@ OUTPACE_PID=""
 OUTPACE_CHECK_STREAM_PID=""
 ZERONET_PID=""
 GUNICORN_PID=""
-ACESTREAM_SEARCH_PID=""
 IPFS_PID=""
 
 # TRAP POSICIONADO AL PRINCIPIO: Asegura una salida limpia de TODOS los servicios
@@ -35,7 +34,7 @@ cleanup() {
     exit_code=$?
     trap - INT TERM EXIT USR1 USR2
     echo "Stopping all services cleanly..."
-    for service_pid in "$GUNICORN_PID" "$ZERONET_PID" "$OUTPACE_PID" "$OUTPACE_CHECK_STREAM_PID" "$ACESTREAM_SEARCH_PID" "$IPFS_PID"; do
+    for service_pid in "$GUNICORN_PID" "$ZERONET_PID" "$OUTPACE_PID" "$OUTPACE_CHECK_STREAM_PID" "$IPFS_PID"; do
         if [ -n "$service_pid" ]; then
             kill -TERM "$service_pid" 2>/dev/null || true
         fi
@@ -45,6 +44,7 @@ cleanup() {
 trap cleanup INT TERM EXIT
 
 export ENABLE_WARP=${ENABLE_WARP:-false}
+export ENABLE_ACESTREAM_SEARCH=true
 
 # Initialize WARP if enabled
 if [ "${ENABLE_WARP}" = "true" ]; then
@@ -142,6 +142,11 @@ start_outpace_main() {
     export OUTPACE_READ_TIMEOUT_MS=10000
     export OUTPACE_CACHE_SIZE_MB=128
     export OUTPACE_MAX_CONNECTIONS_PER_STREAM=35
+	export OUTPACE_ENABLE_INBOUND=1
+	export OUTPACE_ENABLE_SEEDING=1
+	export OUTPACE_CACHE_TYPE=memory
+	export OUTPACE_CACHE_DIR=/root/.local/share/outpace/cache
+	export OUTPACE_SEED_STORE_BYTES=134217728
 
     outpace serve >> "$LOG_DIR/outpace.log" 2>&1 &
     OUTPACE_PID=$!
@@ -153,12 +158,18 @@ start_outpace_check_stream() {
     export OUTPACE_PEER_LISTEN=0.0.0.0:8622
     export OUTPACE_DATA_DIR=/root/.local/share/outpace_check
     export OUTPACE_ACE_COMPAT=1
+	export OUTPACE_COMPAT_ACESTREAM_SERVICES=1
     export OUTPACE_MAX_ACTIVE_UPSTREAMS=4
     export OUTPACE_MAX_PARALLEL_CONNECT=8
     export OUTPACE_REQUEST_TIMEOUT_MS=3500
     export OUTPACE_CONNECT_TIMEOUT_MS=5000
     export OUTPACE_READ_TIMEOUT_MS=10000
     export OUTPACE_CACHE_SIZE_MB=32
+	export OUTPACE_ENABLE_INBOUND=1
+    export OUTPACE_ENABLE_SEEDING=0
+    export OUTPACE_CACHE_TYPE=memory
+    export OUTPACE_CACHE_DIR=/root/.local/share/outpace_check/cache
+    export OUTPACE_SEED_STORE_BYTES=33554432
 
     outpace serve >> "$LOG_DIR/outpace_check_stream.log" 2>&1 &
     OUTPACE_CHECK_STREAM_PID=$!
@@ -178,7 +189,7 @@ restart_outpace() {
     start_outpace_check_stream
 }
 
-echo "Starting Outpace engine with experimental AceStream compatibility enabled..."
+echo "Starting Outpace engine with AceStream compatibility enabled..."
 export OUTPACE_SUPERVISOR_PID=$$
 trap restart_outpace USR2
 start_outpace_main
@@ -190,16 +201,6 @@ start_outpace_check_stream
 
 sleep 3
 echo "Outpace engine startup log: $LOG_DIR/outpace.log"
-
-export ENABLE_ACESTREAM_SEARCH=${ENABLE_ACESTREAM_SEARCH:-false}
-
-if [ "$ENABLE_ACESTREAM_SEARCH" = "true" ]; then
-	/opt/acestream/start-engine --client-console --http-port 6880 --port 8625 >> "$LOG_DIR/acestream.log" 2>&1 & 
-	ACESTREAM_SEARCH_PID=$!	
-
-	sleep 3
-	echo "Acestream engine startup log: $LOG_DIR/acestream.log"
-fi
 
 # Start ZeroNet in the background
 cd /app/ZeroNet

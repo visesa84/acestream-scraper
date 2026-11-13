@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![Docker](https://img.shields.io/badge/docker-supported-cyan.svg)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)
 
 Acestream Scraper is a Flask application for collecting and organizing AceStream channel references, managing TV channels and EPG data, and serving playlists or stream links to compatible players. It stores application data in SQLite and provides a web UI and a REST API.
 
@@ -46,7 +46,6 @@ services:
       - WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
       - WG_THREADS=4
       - ENABLE_WARP=false
-      - ENABLE_ACESTREAM_SEARCH=true
       - ENABLE_IPFS=true
       - CONTAINER_NETWORK_MODE=host
       - WARP_LICENSE_KEY=
@@ -97,7 +96,6 @@ Frequently used image environment variables:
 | `ENABLE_WARP` | `false` | Initialize Cloudflare WARP; requires tunnel/network permissions |
 | `WG_QUICK_USERSPACE_IMPLEMENTATION` | `boringtun` | Use the boringtun module to process encrypted VPN traffic |
 | `WG_THREADS` | `4` | Number of CPU threads in parallel for boringtun |
-| `ENABLE_ACESTREAM_SEARCH` | `true` | Start the bundled AceStream search service on port `6880` (P2P port `8625`) |
 | `ENABLE_IPFS` | `true` | Start Kubo IPFS using the lowpower profile |
 | `CHECKSTATUS_ENABLED` | application setting | Enable automatic stream checks |
 
@@ -105,8 +103,8 @@ Application settings such as the playlist base URL, rescrape/check intervals, EP
 
 ## Web Interface
 
-![image](https://github.com/visesa84/acestream-scraper-PyAcexy/blob/main/Dashboard.png)
-![image](https://github.com/visesa84/acestream-scraper-PyAcexy/blob/main/Config.png)
+![image](https://github.com/visesa84/acestream-scraper/blob/main/Dashboard.png)
+![image](https://github.com/visesa84/acestream-scraper/blob/main/Config.png)
 
 ## Web pages and endpoints
 
@@ -148,3 +146,13 @@ Special thanks to the developers of Flask, BeautifulSoup, SQLAlchemy, and other 
 - [Acestream-scrapper](https://github.com/Pipepito/acestream-scraper) - Enhanced Acestream Scraper interface
 - [Outpace](https://github.com/jamezrin/outpace) - AceStream reimplementation in Rust
 - [Kubo](https://github.com/ipfs/kubo) - IPFS implementation
+
+## License & Open Source Components
+
+This project and its associated configuration files (*Dockerfiles*) are distributed under the terms of the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
+
+This application integrates and packages open-source software under their respective licenses:
+* **outpace-stream** (by `jamezrin`): Licensed under **GNU AGPL-3.0**. Original repository: [jamezrin/outpace-stream](https://github.com/jamezrin/outpace-stream).
+* **Kubo (Go-IPFS):** Licensed under **MIT / Apache 2.0**. Official repository: [ipfs/kubo](https://github.com/ipfs/kubo).
+
+In compliance with the **GNU AGPL-3.0**, full copies of the applicable license texts for all included components are packaged directly inside the Docker container image under the `/licenses/` directory.

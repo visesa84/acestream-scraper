@@ -12,11 +12,10 @@ class AcestreamSearchService:
     """Service for searching Acestream channels via the engine API."""
     
     def __init__(self, engine_url: str = None):
-        """Initialize search service with fixed engine URL."""
-        # URL actualizada para la búsqueda en AceStream
-        self.engine_url = "https://search.acestream.net"
+        """Initialize search service with engine URL."""
+        self.engine_url = "http://localhost:6879/search"
         
-        logger.debug(f"Acestream Search Service initialized with fixed engine URL: {self.engine_url}")
+        logger.debug(f"Outpace Search Service initialized with engine URL: {self.engine_url}")
     
     def search(self, query: str = "", page: int = 1, page_size: int = 10, category: str = "") -> Dict[str, Any]:
         """
@@ -32,18 +31,12 @@ class AcestreamSearchService:
             Dict containing search results, pagination info, and status
         """
         try:
-            # Endpoint raíz con los parámetros solicitados
             search_url = self.engine_url
-            api_page = page - 1
             
             params = {
-                'method': 'search',
                 'query': query,
-                'api_version': 1,
-                'api_key': 'test_api_key',
-                'page': api_page,
-                'page_size': page_size,
-                'show_epg': 1
+                'page': page - 1,
+                'page_size': page_size
             }
             
             if category:
@@ -53,40 +46,48 @@ class AcestreamSearchService:
                 'User-Agent': 'AceStream/3.1'
             }
             
-            # allow_redirects=True para manejar el 301 Moved Permanently hacia api.acestream.me
-            response = requests.get(search_url, params=params, headers=headers, allow_redirects=True, timeout=10)
+            response = requests.get(search_url, params=params, headers=headers, timeout=10)
             logger.info(f"Search API response status code: {response.status_code}")
             
             if response.status_code == 200:
-                raw_response = response.text
                 try:
                     search_data = response.json()
-                    # Adaptado al nuevo formato JSON plano de la API de AceStream
-                    raw_results = search_data.get('results', [])
-                    total_results = search_data.get('total', 0)
+                    # Adaptado a la estructura {"error": null, "result": {"results": [...]}}
+                    res_container = search_data.get('result', {})
+                    raw_results = res_container.get('results', [])
+                    total_results = len(raw_results)  # O ajustarlo si el motor devuelve un campo total global
                     
                     processed_results = []
                     for result in raw_results:
-                        if 'items' in result and isinstance(result['items'], list) and len(result['items']) > 0:
-                            for item in result['items']:
+                        channel_name = result.get('name', 'Unnamed Channel')
+                        items = result.get('items', [])
+                        
+                        if items and isinstance(items, list):
+                            for item in items:
                                 infohash = item.get('infohash')
-                                processed_item = {
-                                    'name': result.get('name', 'Unnamed Channel'),
-                                    'id': infohash,  # Se asigna directamente el infohash como id
-                                    'categories': item.get('categories', []),
-                                    'bitrate': item.get('bitrate', 0)
-                                }
-                                for key, value in item.items():
-                                    if key not in processed_item:
-                                        processed_item[key] = value
-                                processed_results.append(processed_item)
+                                if infohash:
+                                    # Aseguramos que el ID lleve el prefijo ih: como se acordó en el proyecto
+                                    formatted_id = f"ih:{infohash}" if not infohash.startswith('ih:') else infohash
+                                    
+                                    processed_item = {
+                                        'name': item.get('name', channel_name),
+                                        'id': formatted_id,
+                                        'infohash': infohash,
+                                        'bitrate': item.get('bitrate', 0),
+                                        'categories': item.get('categories', []),
+                                        'countries': item.get('countries', []),
+                                        'languages': item.get('languages', []),
+                                        'availability': item.get('availability', 0.0)
+                                    }
+                                    processed_results.append(processed_item)
                         else:
-                            result_id = result.get('infohash', result.get('id', ''))
-                            if result_id:
-                                result['id'] = result_id
+                            infohash = result.get('infohash')
+                            if infohash:
+                                formatted_id = f"ih:{infohash}" if not infohash.startswith('ih:') else infohash
+                                result['id'] = formatted_id
                                 processed_results.append(result)
                     
-                    result = {
+                    result_dict = {
                         'success': True,
                         'message': 'Search successful',
                         'results': processed_results,
@@ -97,7 +98,7 @@ class AcestreamSearchService:
                             'total_pages': (total_results + page_size - 1) // page_size if total_results > 0 else 0
                         }
                     }
-                    return result
+                    return result_dict
                 except json.JSONDecodeError as json_err:
                     logger.error(f"Failed to parse JSON response: {json_err}")
                     return {
@@ -130,63 +131,47 @@ class AcestreamSearchService:
         all_processed_results = []
         seen_ids = set()
         current_page = 1
-        total_pages = 1
         
-        while current_page <= total_pages and current_page <= max_pages:
+        while current_page <= max_pages:
             try:
-                search_url = self.engine_url
-                api_page = current_page - 1
-                
                 params = {
-                    'method': 'search',
                     'query': query,
-                    'api_version': 1,
-                    'api_key': 'test_api_key',
-                    'page': api_page,
-                    'page_size': page_size,
-                    'show_epg': 1
+                    'page': current_page - 1,
+                    'page_size': page_size
                 }
                 if category:
                     params['category'] = category
                 
-                headers = {
-                    'User-Agent': 'AceStream/3.1'
-                }
-                
-                response = requests.get(search_url, params=params, headers=headers, allow_redirects=True, timeout=10)
+                response = requests.get(self.engine_url, params=params, timeout=10)
                 if response.status_code != 200:
                     break
                     
                 search_data = response.json()
-                raw_results = search_data.get('results', [])
-                total_results = search_data.get('total', 0)
+                res_container = search_data.get('result', {})
+                raw_results = res_container.get('results', [])
                 
-                if total_results > 0 and page_size > 0:
-                    total_pages = (total_results + page_size - 1) // page_size
+                if not raw_results:
+                    break
 
                 for result in raw_results:
-                    if 'items' in result and isinstance(result['items'], list) and len(result['items']) > 0:
-                        for item in result['items']:
+                    channel_name = result.get('name', 'Unnamed Channel')
+                    items = result.get('items', [])
+                    
+                    if items and isinstance(items, list):
+                        for item in items:
                             infohash = item.get('infohash')
                             if infohash and infohash not in seen_ids:
                                 seen_ids.add(infohash)
+                                formatted_id = f"ih:{infohash}" if not infohash.startswith('ih:') else infohash
                                 processed_item = {
-                                    'name': result.get('name', 'Unnamed Channel'),
-                                    'id': infohash,  # Se asigna directamente el infohash como id
+                                    'name': item.get('name', channel_name),
+                                    'id': formatted_id,
+                                    'infohash': infohash,
+                                    'bitrate': item.get('bitrate', 0),
                                     'categories': item.get('categories', []),
-                                    'bitrate': item.get('bitrate', 0)
+                                    'availability': item.get('availability', 0.0)
                                 }
-                                for key, value in item.items():
-                                    if key not in processed_item:
-                                        processed_item[key] = value
                                 all_processed_results.append(processed_item)
-                    else:
-                        result_id = result.get('infohash', result.get('id', ''))
-                        if result_id:
-                            if result_id not in seen_ids:
-                                seen_ids.add(result_id)
-                                result['id'] = result_id
-                                all_processed_results.append(result)
 
                 current_page += 1
             except Exception as e:
@@ -205,5 +190,4 @@ class AcestreamSearchService:
         return None
     
     def get_content_id(self, infohash: str) -> Optional[str]:
-        # Método adaptado para devolver directamente el infohash al no admitirlo el nuevo motor
-        return infohash
+        return infohash if infohash.startswith('ih:') else f"ih:{infohash}"

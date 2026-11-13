@@ -8,71 +8,66 @@ WORKDIR /src
 RUN sed -i 's/\[dependencies\]/\[dependencies\]\ntime = "=0.3.36"\ntime-core = "=0.1.2"/' boringtun-cli/Cargo.toml
 RUN cargo install --path boringtun-cli
 
-# --- STAGE 1: Descarga automática de Outpace desde GitHub según arquitectura ---
+# --- STAGE 1: Descarga automática de Outpace desde GitHub ---
 FROM python:3.10-slim AS builder-outpace
-RUN apt-get update && apt-get install -y curl ca-certificates tar gzip unzip
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates tar gzip unzip && rm -rf /var/lib/apt/lists/*
 
 COPY outpace_fix/ /tmp/outpace_fix/
+RUN mkdir -p /tmp/licenses_outpace
 
-RUN echo "import platform" > /tmp/download.py && \
-    echo "import urllib.request" >> /tmp/download.py && \
-    echo "import json" >> /tmp/download.py && \
-    echo "import os" >> /tmp/download.py && \
-    echo "import tarfile" >> /tmp/download.py && \
-    echo "import zipfile" >> /tmp/download.py && \
-    echo "import shutil" >> /tmp/download.py && \
-    echo 'api_url = "https://api.github.com/repos/jamezrin/outpace/releases/latest"' >> /tmp/download.py && \
-    echo 'headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "Acestream-Scraper-Client"}' >> /tmp/download.py && \
-    echo 'req = urllib.request.Request(api_url, headers=headers)' >> /tmp/download.py && \
-    echo 'with urllib.request.urlopen(req) as response:' >> /tmp/download.py && \
-    echo '    release_data = json.loads(response.read().decode())' >> /tmp/download.py && \
-    echo 'assets = release_data.get("assets", [])' >> /tmp/download.py && \
-    echo 'system = platform.system().lower()' >> /tmp/download.py && \
-    echo 'machine = platform.machine().lower()' >> /tmp/download.py && \
-    echo 'if machine in ["x86_64", "amd64"]:' >> /tmp/download.py && \
-    echo '    arch_keywords = ["amd64", "x86_64", "x64"]' >> /tmp/download.py && \
-    echo 'elif machine in ["aarch64", "armv8", "arm64"]:' >> /tmp/download.py && \
-    echo '    arch_keywords = ["arm64", "aarch64"]' >> /tmp/download.py && \
-    echo 'elif machine in ["arm", "hf", "armv7l"]:' >> /tmp/download.py && \
-    echo '    arch_keywords = ["armv7", "armhf", "arm"]' >> /tmp/download.py && \
-    echo 'else:' >> /tmp/download.py && \
-    echo '    arch_keywords = [machine]' >> /tmp/download.py && \
-    echo 'download_url = None' >> /tmp/download.py && \
-    echo 'for asset in assets:' >> /tmp/download.py && \
-    echo '    name = asset.get("name", "").lower()' >> /tmp/download.py && \
-    echo '    if "linux" in name and any(ak in name for ak in arch_keywords):' >> /tmp/download.py && \
-    echo '        if "apple" not in name and "windows" not in name:' >> /tmp/download.py && \
-    echo '            download_url = asset.get("browser_download_url")' >> /tmp/download.py && \
-    echo '            break' >> /tmp/download.py && \
-    echo 'if not download_url:' >> /tmp/download.py && \
-    echo '    raise Exception(f"No se encontró un asset compatible para Linux y arquitectura {machine}")' >> /tmp/download.py && \
-    echo 'print(f"Descargando Outpace asset desde: {download_url}")' >> /tmp/download.py && \
-    echo 'urllib.request.urlretrieve(download_url, "/tmp/outpace_asset")' >> /tmp/download.py && \
-    echo 'target_path = "/usr/local/bin/outpace"' >> /tmp/download.py && \
-    echo 'if download_url.endswith((".tar.gz", ".tgz")):' >> /tmp/download.py && \
-    echo '    with tarfile.open("/tmp/outpace_asset", "r:gz") as tar:' >> /tmp/download.py && \
-    echo '        # Filtrar estrictamente excluyendo licencias y documentos de texto' >> /tmp/download.py && \
-    echo '        member = next((m for m in tar.getmembers() if m.isfile() and not m.name.lower().endswith((".md", ".txt", "license", "copying")) and ("outpace" in m.name.lower() or len(tar.getmembers()) == 1)), None)' >> /tmp/download.py && \
-    echo '        if not member:' >> /tmp/download.py && \
-    echo '            member = next((m for m in tar.getmembers() if m.isfile() and not m.name.lower().endswith((".md", ".txt", "license", "copying"))), None)' >> /tmp/download.py && \
-    echo '        if not member:' >> /tmp/download.py && \
-    echo '            raise Exception("ERROR: No se encontró ningún archivo binario válido en el tar.gz de Outpace.")' >> /tmp/download.py && \
-    echo '        extracted = tar.extractfile(member)' >> /tmp/download.py && \
-    echo '        with open(target_path, "wb") as f_out:' >> /tmp/download.py && \
-    echo '            f_out.write(extracted.read())' >> /tmp/download.py && \
-    echo 'elif download_url.endswith(".zip"):' >> /tmp/download.py && \
-    echo '    with zipfile.ZipFile("/tmp/outpace_asset", "r") as z:' >> /tmp/download.py && \
-    echo '        namelist = [n for n in z.namelist() if not n.endswith("/") and not any(n.lower().endswith(ext) for ext in [".md", ".txt", "license", "copying"])]' >> /tmp/download.py && \
-    echo '        fname = next((n for n in namelist if "outpace" in n.lower()), namelist[0] if namelist else None)' >> /tmp/download.py && \
-    echo '        if not fname:' >> /tmp/download.py && \
-    echo '            raise Exception("ERROR: No se encontró ningún binario válido en el zip.")' >> /tmp/download.py && \
-    echo '        with z.open(fname) as f_in, open(target_path, "wb") as f_out:' >> /tmp/download.py && \
-    echo '            f_out.write(f_in.read())' >> /tmp/download.py && \
-    echo 'else:' >> /tmp/download.py && \
-    echo '    shutil.move("/tmp/outpace_asset", target_path)' >> /tmp/download.py && \
-    echo 'os.chmod(target_path, 0o755)' >> /tmp/download.py
-
-RUN python3 /tmp/download.py && rm /tmp/download.py
+RUN set -eu; \
+    release="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: Acestream-Scraper-Client' https://api.github.com/repos/jamezrin/outpace-stream/releases/latest)"; \
+    target_arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "$target_arch" in \
+        amd64|x86_64) kw="x86_64" ;; \
+        arm64|aarch64) kw="aarch64" ;; \
+        arm|armv7|armv7l) kw="armv7" ;; \
+        *) kw="$target_arch" ;; \
+    esac; \
+    \
+    echo "Buscando asset para la arquitectura clave: $kw"; \
+    \
+    # Selección compatible con versiones estándar de jq usando contains en lugar de endsWith
+    download_url="$(printf '%s' "$release" | jq -r --arg kw "$kw" \
+        '.assets[]? | select((.name | contains($kw)) and (.name | contains("linux")) and (.name | contains(".tar.gz"))) | .browser_download_url' | head -n 1)"; \
+    \
+    if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then \
+        echo "Error: No se encontró el asset de Linux compatible con $kw."; \
+        exit 1; \
+    fi; \
+    \
+    echo "Descargando Outpace asset desde: $download_url"; \
+    curl -fsSL "$download_url" -o /tmp/outpace_asset; \
+    mkdir -p /tmp/outpace_extracted; \
+    \
+    target_path="/usr/local/bin/outpace"; \
+    case "$download_url" in \
+        *.tar.gz|*.tgz) \
+            tar -xzf /tmp/outpace_asset -C /tmp/outpace_extracted; \
+            extracted_file=$(find /tmp/outpace_extracted -type f ! -name "*.md" ! -iname "*license*" ! -iname "*copying*" | grep -iE "outpace" | head -n 1); \
+            [ -z "$extracted_file" ] && extracted_file=$(find /tmp/outpace_extracted -type f | head -n 1); \
+            cp "$extracted_file" "$target_path"; \
+            license_file=$(find /tmp/outpace_extracted -type f -iname "*license*" -o -iname "*copying*" | head -n 1); \
+            if [ -n "$license_file" ]; then \
+                cp "$license_file" /tmp/licenses_outpace/LICENSE-outpace; \
+            fi; \
+            ;; \
+        *.zip) \
+            python3 -c "import zipfile; z = zipfile.ZipFile('/tmp/outpace_asset'); z.extractall('/tmp/outpace_extracted')"; \
+            extracted_file=$(find /tmp/outpace_extracted -type f ! -name "*.md" ! -iname "*license*" ! -iname "*copying*" | grep -iE "outpace" | head -n 1); \
+            [ -z "$extracted_file" ] && extracted_file=$(find /tmp/outpace_extracted -type f | head -n 1); \
+            cp "$extracted_file" "$target_path"; \
+            license_file=$(find /tmp/outpace_extracted -type f -iname "*license*" -o -iname "*copying*" | head -n 1); \
+            if [ -n "$license_file" ]; then \
+                cp "$license_file" /tmp/licenses_outpace/LICENSE-outpace; \
+            fi; \
+            ;; \
+        *) \
+            mv /tmp/outpace_asset "$target_path"; \
+            ;; \
+    esac; \
+    chmod +x "$target_path"
 
 # Verificación de versión y reemplazo condicional en Bash
 RUN set -ex; \
@@ -110,6 +105,7 @@ RUN set -ex; \
 FROM builder-outpace AS builder-kubo
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /tmp/licenses_kubo
 RUN set -eu; \
     release="$(curl -fsSL -H 'Accept: application/vnd.github+json' -H 'User-Agent: Acestream-Scraper-Client' https://api.github.com/repos/ipfs/kubo/releases/latest)"; \
     tag="$(printf '%s' "$release" | jq -er '.tag_name')"; \
@@ -119,8 +115,9 @@ RUN set -eu; \
             asset_name="kubo_${tag}_linux-${target_arch}.tar.gz"; \
             download_url="$(printf '%s' "$release" | jq -er --arg name "$asset_name" '.assets[] | select(.name == $name) | .browser_download_url')"; \
             curl -fsSL "$download_url" -o /tmp/kubo.tar.gz; \
-            tar -xzf /tmp/kubo.tar.gz -C /tmp kubo/ipfs; \
+            tar -xzf /tmp/kubo.tar.gz -C /tmp kubo/ipfs kubo/LICENSE kubo/LICENSE-APACHE kubo/LICENSE-MIT; \
             install -m 755 /tmp/kubo/ipfs /usr/local/bin/ipfs; \
+            cp /tmp/kubo/LICENSE* /tmp/licenses_kubo/; \
             ;; \
         *) \
             exit 1; \
@@ -132,7 +129,7 @@ FROM python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.3"
+      version="2.3.1"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -210,9 +207,15 @@ ENV FLASK_PORT=8040
 # --- STAGE 4: Imagen Final de la Aplicación ---
 FROM base
 WORKDIR /app
+RUN mkdir -p /licenses
+
+# Copiar licencias al directorio definitivo
+COPY LICENSE /licenses/LICENSE-acestream-scraper
+COPY --from=builder-outpace /tmp/licenses_outpace/ /licenses/
+COPY --from=builder-kubo /tmp/licenses_kubo/ /licenses/
 
 LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.3"
+      version="2.3.1"
 
 # Copiar archivos de la aplicación y scripts de control
 COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh
