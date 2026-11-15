@@ -29,7 +29,7 @@ RUN set -eu; \
     \
     # Selección compatible con versiones estándar de jq usando contains en lugar de endsWith
     download_url="$(printf '%s' "$release" | jq -r --arg kw "$kw" \
-        '.assets[]? | select((.name | contains($kw)) and (.name | contains("linux")) and (.name | contains(".tar.gz"))) | .browser_download_url' | head -n 1)"; \
+        '.assets[]? | select((.name | contains($kw)) and (.name | contains("linux")) and (.name | contains("android") | not) and (.name | contains(".tar.gz"))) | .browser_download_url' | head -n 1)"; \
     \
     if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then \
         echo "Error: No se encontró el asset de Linux compatible con $kw."; \
