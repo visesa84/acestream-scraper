@@ -140,8 +140,20 @@ if [ "$ENABLE_IPFS" = "true" ]; then
 fi
 
 start_outpace_main() {
-	cd /app
-	
+    cd /app
+    
+    # 1. Variables FIJAS obligatorias para Outpace Main
+    export OUTPACE_BIND=0.0.0.0:6878
+    export OUTPACE_RTMP_BIND=0.0.0.0:1935
+    export OUTPACE_PEER_LISTEN=0.0.0.0:8621
+    export OUTPACE_DATA_DIR=/root/.local/share/outpace
+    export OUTPACE_ACE_COMPAT=1
+    export OUTPACE_ENABLE_INBOUND=1
+    export OUTPACE_ENABLE_SEEDING=1
+    export OUTPACE_CACHE_TYPE=memory
+    export OUTPACE_CACHE_DIR=/root/.local/share/outpace/cache
+
+    # 2. Cargar normalización de audio de forma independiente desde la DB
     AUDIO_NORMALIZE=$(python3 -c "
 import os, sys
 os.environ.setdefault('FLASK_APP', 'manage.py')
@@ -151,35 +163,31 @@ try:
     app = create_app()
     with app.app_context():
         repo = SettingsRepository()
-        val = repo.get('outpace_live_audio_normalize', '0')
-        if not val or not str(val).strip():
-            print('0')
-        else:
-            print(str(val).strip())
-except Exception as e:
+        print(repo.get('outpace_live_audio_normalize', '0'))
+except Exception:
     print('0')
 " 2>/dev/null | tr -d '[:space:]')
     
-    echo "Outpace audio normalization loaded from DB: [${AUDIO_NORMALIZE}]"
     export OUTPACE_LIVE_AUDIO_NORMALIZE=${AUDIO_NORMALIZE:-0}
-    
-    export OUTPACE_BIND=0.0.0.0:6878
-    export OUTPACE_RTMP_BIND=0.0.0.0:1935
-    export OUTPACE_PEER_LISTEN=0.0.0.0:8621
-    export OUTPACE_DATA_DIR=/root/.local/share/outpace
-    export OUTPACE_ACE_COMPAT=1
-    export OUTPACE_MAX_ACTIVE_UPSTREAMS=6
-    export OUTPACE_MAX_PARALLEL_CONNECT=16
-    export OUTPACE_REQUEST_TIMEOUT_MS=3500
-    export OUTPACE_CONNECT_TIMEOUT_MS=5000
-    export OUTPACE_READ_TIMEOUT_MS=10000
-    export OUTPACE_CACHE_SIZE_MB=128
-    export OUTPACE_MAX_CONNECTIONS_PER_STREAM=35
-    export OUTPACE_ENABLE_INBOUND=1
-    export OUTPACE_ENABLE_SEEDING=1
-    export OUTPACE_CACHE_TYPE=memory
-    export OUTPACE_CACHE_DIR=/root/.local/share/outpace/cache
-    export OUTPACE_SEED_STORE_BYTES=134217728
+
+    # 3. Cargar dinámicamente cualquier OTRA variable extra personalizada desde la DB
+    eval "$(python3 -c "
+import os, sys
+os.environ.setdefault('FLASK_APP', 'manage.py')
+try:
+    from app import create_app
+    from app.repositories import SettingsRepository
+    app = create_app()
+    with app.app_context():
+        repo = SettingsRepository()
+        all_settings = repo.get_all_settings()
+        fixed_keys = ['base_url', 'ace_engine_url', 'rescrape_interval', 'setup_completed', 'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode']
+        for k, v in all_settings.items():
+            if k not in fixed_keys and v:
+                print(f'export {k}=\"{v}\"')
+except Exception as e:
+    sys.stderr.write(f'Error loading extra custom vars: {e}\n')
+" 2>/dev/null)"
 
     outpace serve >> "$LOG_DIR/outpace.log" 2>&1 &
     OUTPACE_PID=$!

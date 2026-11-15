@@ -96,7 +96,7 @@ FROM python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.3.2"
+      version="2.4"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -182,7 +182,7 @@ COPY --from=builder-outpace /tmp/licenses_outpace/ /licenses/
 COPY --from=builder-kubo /tmp/licenses_kubo/ /licenses/
 
 LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.3.2"
+      version="2.4"
 
 # Copiar archivos de la aplicación y scripts de control
 COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh

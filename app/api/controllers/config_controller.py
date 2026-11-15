@@ -33,6 +33,10 @@ audio_normalize_model = api.model('AudioNormalize', {
     'audio_normalize': fields.Integer(required=True, description='1 to enable OUTPACE_LIVE_AUDIO_NORMALIZE, 0 to disable')
 })
 
+outpace_vars_model = api.model('OutpaceVariables', {
+    'variables': fields.Raw(description='Key-value dictionary containing Outpace variables')
+})
+
 @api.route('/base_url')
 class BaseURL(Resource):
     def get(self):
@@ -202,4 +206,57 @@ class AudioNormalize(Resource):
             return {"message": "Audio normalization updated and Outpace restart triggered", "audio_normalize": int(val_str)}, 200
         except Exception as e:
             logger.error(f"Error updating audio normalization: {e}")
+            api.abort(500, str(e))
+            
+@api.route('/outpace_variables')
+class OutpaceVariables(Resource):
+    def get(self):
+        """Get custom extra Outpace configuration variables (excluding core fixed ones)."""
+        try:
+            repo = SettingsRepository()
+            all_settings = repo.get_all_settings()
+            
+            # Excluimos las fijas y la de audio para que el modal solo gestione variables puramente personalizadas/extra
+            excluded_keys = [
+                'base_url', 'ace_engine_url', 'rescrape_interval', 'setup_completed', 
+                'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode',
+                'OUTPACE_BIND', 'OUTPACE_RTMP_BIND', 'OUTPACE_PEER_LISTEN', 'OUTPACE_DATA_DIR', 
+                'OUTPACE_ACE_COMPAT', 'OUTPACE_ENABLE_INBOUND', 'OUTPACE_ENABLE_SEEDING', 'OUTPACE_CACHE_TYPE'
+            ]
+            
+            custom_vars = {k: v for k, v in all_settings.items() if k not in excluded_keys}
+            return custom_vars, 200
+        except Exception as e:
+            api.abort(500, str(e))
+    
+    @api.doc('update_outpace_variables')
+    @api.expect(outpace_vars_model)
+    def put(self):
+        """Update custom extra Outpace variables and trigger Outpace restart."""
+        data = request.json or {}
+        variables = data.get('variables', {})
+        
+        excluded_keys = [
+            'base_url', 'ace_engine_url', 'rescrape_interval', 'setup_completed', 
+            'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode'
+        ]
+        
+        try:
+            repo = SettingsRepository()
+            for key, val in variables.items():
+                if key in excluded_keys:
+                    continue # Evitar modificar claves reservadas desde este modal genérico
+                repo.set(key, str(val))
+                os.environ[key] = str(val)
+            
+            # Reiniciar Outpace mediante la señal SIGUSR2 al supervisor que ya utilizas
+            supervisor_pid = os.environ.get('OUTPACE_SUPERVISOR_PID')
+            if supervisor_pid:
+                import signal
+                os.kill(int(supervisor_pid), signal.SIGUSR2)
+                logger.info("Sent SIGUSR2 signal to supervisor to restart Outpace with new custom variables")
+            
+            return {"message": "Custom Outpace variables updated and restart triggered"}, 200
+        except Exception as e:
+            logger.error(f"Error updating custom Outpace variables: {e}")
             api.abort(500, str(e))

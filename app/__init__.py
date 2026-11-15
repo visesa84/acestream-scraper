@@ -99,6 +99,9 @@ def create_app(test_config=None):
             
             settings_repo = SettingsRepository()
             config.set_settings_repository(settings_repo)
+            
+            # Inicializar los valores por defecto en la base de datos
+            settings_repo.setup_defaults()
 
             if not is_testing:
                 task_manager.init_app(app)

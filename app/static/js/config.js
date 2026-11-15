@@ -327,6 +327,137 @@ document.getElementById('audioNormalizeSwitch')?.addEventListener('change', asyn
     }
 });
 
+/**
+ * Carga las variables de Outpace desde el backend y las dibuja en el modal
+ */
+async function loadOutpaceVariables() {
+    const container = document.getElementById('outpaceVariablesList');
+    if (!container) return;
+
+    try {
+        container.innerHTML = '<div class="text-center text-muted py-3">Loading variables...</div>';
+        
+        // Petición GET al nuevo endpoint del controlador
+        const response = await fetch('/api/config/outpace_variables');
+        if (!response.ok) throw new Error('Failed to fetch Outpace variables');
+        
+        const data = await response.json(); // Devuelve un objeto clave-valor (ej: { OUTPACE_VAR: "value", ... })
+        
+        if (Object.keys(data).length === 0) {
+            container.innerHTML = '<div class="text-muted small text-center py-2">No custom variables defined. Click "Add Variable" below.</div>';
+            return;
+        }
+
+        renderOutpaceVariableRows(data);
+    } catch (err) {
+        console.error('Error loading Outpace variables:', err);
+        container.innerHTML = '<div class="text-danger small text-center py-2">Error loading configuration variables.</div>';
+    }
+}
+
+/**
+ * Renderiza dinámicamente las filas de claves y valores en el modal
+ */
+function renderOutpaceVariableRows(variablesObj) {
+    const container = document.getElementById('outpaceVariablesList');
+    container.innerHTML = '';
+
+    for (const [key, value] of Object.entries(variablesObj)) {
+        appendOutpaceVariableRow(key, value);
+    }
+}
+
+/**
+ * Añade una nueva fila vacía o con datos en el contenedor del modal
+ */
+function appendOutpaceVariableRow(key = '', value = '') {
+    const container = document.getElementById('outpaceVariablesList');
+    if (container.querySelector('.text-muted')) {
+        container.innerHTML = ''; // Limpiar mensaje de "Loading" o "No variables"
+    }
+
+    const rowId = 'var-row-' + Math.random().toString(36).substring(2, 9);
+    const rowHtml = `
+        <div class="row g-2 mb-2 align-items-center" id="${rowId}">
+            <div class="col-5">
+                <input type="text" class="form-control bg-body-tertiary border-0 rounded-3 var-key" placeholder="KEY_NAME" value="${key}" required>
+            </div>
+            <div class="col-6">
+                <input type="text" class="form-control bg-body-tertiary border-0 rounded-3 var-value" placeholder="value" value="${value}" required>
+            </div>
+            <div class="col-1 text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm border-0 rounded-circle" onclick="document.getElementById('${rowId}').remove()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', rowHtml);
+}
+
+/**
+ * Botón del modal para añadir una fila en blanco
+ */
+function addOutpaceVariableRow() {
+    appendOutpaceVariableRow('', '');
+}
+
+/**
+ * Recopila los inputs, los empaqueta bajo la estructura que espera Flask-RestX y los envía
+ */
+async function saveAndRestartOutpace() {
+    const rows = document.querySelectorAll('#outpaceVariablesList .row');
+    const variablesObj = {};
+
+    rows.forEach(row => {
+        const keyInput = row.querySelector('.var-key');
+        const valInput = row.querySelector('.var-value');
+        if (keyInput && valInput) {
+            const k = keyInput.value.trim();
+            const v = valInput.value.trim();
+            if (k) {
+                variablesObj[k] = v;
+            }
+        }
+    });
+
+    if (!confirm('Are you sure you want to save these variables and restart Outpace?')) {
+        return;
+    }
+
+    try {
+        showLoading();
+        
+        // Petición PUT empaquetando los datos en la clave 'variables' tal como se definió en el Namespace
+        const response = await fetch('/api/config/outpace_variables', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ variables: variablesObj })
+        });
+
+        if (response.ok) {
+            console.log('Outpace variables updated and restart triggered.');
+            
+            // Cerrar el modal de Bootstrap de forma limpia
+            const modalEl = document.getElementById('outpaceVariablesModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            // Esperar unos segundos a que el servidor se reinicie y recargar la página automáticamente
+            setTimeout(() => {
+                window.location.reload();
+            }, 4000);
+        } else {
+            alert('Error saving variables.');
+            hideLoading();
+        }
+    } catch (err) {
+        console.error('Network error:', err);
+        alert('Network error while saving configuration.');
+        hideLoading();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', loadAudioNormalizeConfig);
 
 document.addEventListener('DOMContentLoaded', function() {
