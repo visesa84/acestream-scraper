@@ -98,14 +98,17 @@ def check_outpace_github_updates():
         else:
             arch_keywords = [machine]
             
-        # 3. Buscar el archivo binario correspondiente
+        # 3. Buscar el archivo binario correspondiente (excluyendo estrictamente Android)
         download_url = None
         for asset in assets:
             name = asset.get("name", "").lower()
-            matches_system = system in name or "linux" in name
+            
+            # Condiciones estrictas: debe ser de linux, contener la arquitectura y NO contener android
+            is_linux = "linux" in name
+            is_android = "android" in name
             matches_arch = any(ak in name for ak in arch_keywords)
             
-            if matches_system and matches_arch:
+            if is_linux and not is_android and matches_arch:
                 download_url = asset.get("browser_download_url")
                 break
                 
