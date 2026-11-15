@@ -14,6 +14,13 @@ class SettingsRepository:
     RESCRAPE_INTERVAL = 'rescrape_interval'
     SETUP_COMPLETED = 'setup_completed'
     
+    # Forzar valores fijos internos para que no puedan ser sobreescritos por la BD
+    OUTPACE_BIND = '0.0.0.0:6878'
+    OUTPACE_RTMP_BIND = '0.0.0.0:1935'
+    OUTPACE_PEER_LISTEN = '0.0.0.0:8621'
+    OUTPACE_DATA_DIR = '/root/.local/share/outpace'
+    OUTPACE_CACHE_DIR = '/root/.local/share/outpace/cache'
+    
     # Outpace core configurable constants keys
     OUTPACE_ACE_COMPAT_KEY = 'OUTPACE_ACE_COMPAT'
     OUTPACE_MAX_ACTIVE_UPSTREAMS_KEY = 'OUTPACE_MAX_ACTIVE_UPSTREAMS'

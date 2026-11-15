@@ -402,12 +402,17 @@ function addOutpaceVariableRow() {
     appendOutpaceVariableRow('', '');
 }
 
-/**
- * Recopila los inputs, los empaqueta bajo la estructura que espera Flask-RestX y los envía
- */
 async function saveAndRestartOutpace() {
     const rows = document.querySelectorAll('#outpaceVariablesList .row');
     const variablesObj = {};
+    
+    const forbiddenKeys = [
+        'OUTPACE_BIND', 'OUTPACE_RTMP_BIND', 'OUTPACE_PEER_LISTEN', 
+        'OUTPACE_DATA_DIR', 'OUTPACE_ACE_COMPAT', 'OUTPACE_ENABLE_INBOUND', 
+        'OUTPACE_ENABLE_SEEDING', 'OUTPACE_CACHE_TYPE', 'OUTPACE_CACHE_DIR'
+    ];
+
+    let hasForbidden = false;
 
     rows.forEach(row => {
         const keyInput = row.querySelector('.var-key');
@@ -416,19 +421,29 @@ async function saveAndRestartOutpace() {
             const k = keyInput.value.trim();
             const v = valInput.value.trim();
             if (k) {
-                variablesObj[k] = v;
+                if (forbiddenKeys.includes(k)) {
+                    hasForbidden = true;
+                    keyInput.style.border = '2px solid #dc3545';
+                    keyInput.style.backgroundColor = '#f8d7da';
+                } else {
+                    variablesObj[k] = v;
+                }
             }
         }
     });
 
-    if (!confirm('Are you sure you want to save these variables and restart Outpace?')) {
+    if (hasForbidden) {
+        alert('Error: You cannot modify or add protected Outpace system variables.');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to save these variables?')) {
         return;
     }
 
     try {
         showLoading();
         
-        // Petición PUT empaquetando los datos en la clave 'variables' tal como se definió en el Namespace
         const response = await fetch('/api/config/outpace_variables', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -436,17 +451,18 @@ async function saveAndRestartOutpace() {
         });
 
         if (response.ok) {
-            console.log('Outpace variables updated and restart triggered.');
+            const result = await response.json();
+            console.log(result.message);
             
-            // Cerrar el modal de Bootstrap de forma limpia
             const modalEl = document.getElementById('outpaceVariablesModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
 
-            // Esperar unos segundos a que el servidor se reinicie y recargar la página automáticamente
+            // Si el backend indica que hubo cambios y se reinició, recargamos con delay. 
+            // Si no hubo cambios, la página se oculta sin recargar bruscamente.
             setTimeout(() => {
                 window.location.reload();
-            }, 4000);
+            }, 2000);
         } else {
             alert('Error saving variables.');
             hideLoading();

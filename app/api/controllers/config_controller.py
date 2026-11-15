@@ -216,12 +216,13 @@ class OutpaceVariables(Resource):
             repo = SettingsRepository()
             all_settings = repo.get_all_settings()
             
-            # Excluimos las fijas y la de audio para que el modal solo gestione variables puramente personalizadas/extra
+            # Lista completa de variables protegidas que el usuario NUNCA debe modificar desde la interfaz
             excluded_keys = [
                 'base_url', 'ace_engine_url', 'rescrape_interval', 'setup_completed', 
                 'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode',
                 'OUTPACE_BIND', 'OUTPACE_RTMP_BIND', 'OUTPACE_PEER_LISTEN', 'OUTPACE_DATA_DIR', 
-                'OUTPACE_ACE_COMPAT', 'OUTPACE_ENABLE_INBOUND', 'OUTPACE_ENABLE_SEEDING', 'OUTPACE_CACHE_TYPE'
+                'OUTPACE_ACE_COMPAT', 'OUTPACE_ENABLE_INBOUND', 'OUTPACE_ENABLE_SEEDING', 
+                'OUTPACE_CACHE_TYPE', 'OUTPACE_CACHE_DIR'
             ]
             
             custom_vars = {k: v for k, v in all_settings.items() if k not in excluded_keys}
@@ -232,31 +233,55 @@ class OutpaceVariables(Resource):
     @api.doc('update_outpace_variables')
     @api.expect(outpace_vars_model)
     def put(self):
-        """Update custom extra Outpace variables and trigger Outpace restart."""
+        """Update custom extra Outpace variables and trigger Outpace restart only if changes occur."""
         data = request.json or {}
         variables = data.get('variables', {})
         
         excluded_keys = [
             'base_url', 'ace_engine_url', 'rescrape_interval', 'setup_completed', 
-            'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode'
+            'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode',
+            'OUTPACE_BIND', 'OUTPACE_RTMP_BIND', 'OUTPACE_PEER_LISTEN', 'OUTPACE_DATA_DIR', 
+            'OUTPACE_ACE_COMPAT', 'OUTPACE_ENABLE_INBOUND', 'OUTPACE_ENABLE_SEEDING', 
+            'OUTPACE_CACHE_TYPE', 'OUTPACE_CACHE_DIR'
         ]
         
         try:
             repo = SettingsRepository()
+            current_settings = repo.get_all_settings()
+            
+            has_changes = False
+            
             for key, val in variables.items():
                 if key in excluded_keys:
-                    continue # Evitar modificar claves reservadas desde este modal genérico
-                repo.set(key, str(val))
-                os.environ[key] = str(val)
-            
-            # Reiniciar Outpace mediante la señal SIGUSR2 al supervisor que ya utilizas
-            supervisor_pid = os.environ.get('OUTPACE_SUPERVISOR_PID')
-            if supervisor_pid:
-                import signal
-                os.kill(int(supervisor_pid), signal.SIGUSR2)
-                logger.info("Sent SIGUSR2 signal to supervisor to restart Outpace with new custom variables")
-            
-            return {"message": "Custom Outpace variables updated and restart triggered"}, 200
+                    continue
+                
+                val_str = str(val)
+                old_val = current_settings.get(key)
+                
+                if old_val != val_str:
+                    has_changes = True
+                
+                repo.set(key, val_str)
+                os.environ[key] = val_str
+                
+            custom_keys_in_db = [k for k in current_settings.keys() if k not in excluded_keys]
+            for k in custom_keys_in_db:
+                if k not in variables:
+                    has_changes = True
+                    repo.set(k, "")
+                    if k in os.environ:
+                        del os.environ[k]
+
+            if has_changes:
+                supervisor_pid = os.environ.get('OUTPACE_SUPERVISOR_PID')
+                if supervisor_pid:
+                    import signal
+                    os.kill(int(supervisor_pid), signal.SIGUSR2)
+                    logger.info("Changes detected: Sent SIGUSR2 signal to supervisor to restart Outpace.")
+                return {"message": "Custom Outpace variables updated and restart triggered"}, 200
+            else:
+                return {"message": "No changes detected. Outpace restart skipped."}, 200
+
         except Exception as e:
             logger.error(f"Error updating custom Outpace variables: {e}")
             api.abort(500, str(e))

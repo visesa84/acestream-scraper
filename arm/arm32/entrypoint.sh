@@ -170,7 +170,7 @@ except Exception:
     
     export OUTPACE_LIVE_AUDIO_NORMALIZE=${AUDIO_NORMALIZE:-0}
 
-    # 3. Cargar dinámicamente cualquier OTRA variable extra personalizada desde la DB
+	# 3. Cargar dinámicamente cualquier OTRA variable extra personalizada desde la DB
     eval "$(python3 -c "
 import os, sys
 os.environ.setdefault('FLASK_APP', 'manage.py')
@@ -181,7 +181,16 @@ try:
     with app.app_context():
         repo = SettingsRepository()
         all_settings = repo.get_all_settings()
-        fixed_keys = ['base_url', 'ace_engine_url', 'rescrape_interval', 'setup_completed', 'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode']
+        
+        # Claves protegidas que deben ignorarse para no sobrescribir los valores fijos
+        fixed_keys = [
+            'base_url', 'ace_engine_url', 'rescrape_interval', 'setup_completed', 
+            'outpace_live_audio_normalize', 'checkstatus_interval', 'checkstatus_enabled', 'stream_mode',
+            'OUTPACE_BIND', 'OUTPACE_RTMP_BIND', 'OUTPACE_PEER_LISTEN', 'OUTPACE_DATA_DIR', 
+            'OUTPACE_ACE_COMPAT', 'OUTPACE_ENABLE_INBOUND', 'OUTPACE_ENABLE_SEEDING', 
+            'OUTPACE_CACHE_TYPE', 'OUTPACE_CACHE_DIR'
+        ]
+        
         for k, v in all_settings.items():
             if k not in fixed_keys and v:
                 print(f'export {k}=\"{v}\"')
