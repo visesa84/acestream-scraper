@@ -5,6 +5,8 @@ import psutil
 import re
 import threading
 import random
+import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from app.extensions import db
@@ -16,6 +18,69 @@ executor = ThreadPoolExecutor(max_workers=1)
 # Conjunto y bloqueo para evitar conversiones simultáneas del mismo archivo
 active_conversions = set()
 conversion_lock = threading.Lock()
+
+BAD_STREAM_PATTERNS = (
+    "corrupt",
+    "reference count",
+    "illegal reordering_of_pic_nums_idc",
+    "error while decoding",
+    "concealing",
+    "invalid data found",
+)
+
+stream_watchers = {}
+watchers_lock = threading.Lock()
+
+
+class StreamHealthWatcher:
+    """Vigila stderr de ffmpeg y corta si hay avalancha sostenida de errores graves."""
+
+    def __init__(self, log_path, grace_seconds=20, window_seconds=15, max_errors=50):
+        self.log_path = log_path
+        self.grace_seconds = grace_seconds
+        self.window_seconds = window_seconds
+        self.max_errors = max_errors
+        self.start_time = time.monotonic()
+        self._file_pos = 0
+        self._error_times = deque()
+
+    def should_abort_stream(self):
+        now = time.monotonic()
+        if now - self.start_time < self.grace_seconds:
+            return False
+
+        if not os.path.exists(self.log_path):
+            return False
+
+        try:
+            with open(self.log_path, "r", encoding="utf-8", errors="ignore") as f:
+                f.seek(self._file_pos)
+                new_lines = f.readlines()
+                self._file_pos = f.tell()
+        except OSError:
+            return False
+
+        for line in new_lines:
+            low = line.lower()
+            if any(pat in low for pat in BAD_STREAM_PATTERNS):
+                self._error_times.append(now)
+
+        cutoff = now - self.window_seconds
+        while self._error_times and self._error_times[0] < cutoff:
+            self._error_times.popleft()
+
+        return len(self._error_times) >= self.max_errors
+
+
+def _cleanup_stream_watcher(program_id):
+    with watchers_lock:
+        watcher = stream_watchers.pop(program_id, None)
+    if watcher and watcher.log_path and os.path.exists(watcher.log_path):
+        try:
+            os.remove(watcher.log_path)
+        except OSError:
+            pass
+
 
 def _get_vaapi_device():
     dri_dir = "/dev/dri"
@@ -206,18 +271,21 @@ def fast_remux_to_mp4(input_ts, output_mp4):
 
     return False
 
+
 def convert_part_task(app, input_path, output_path, rec_id):
     """Tarea ejecutada en la cola de trabajo con control de exclusión."""
     with app.app_context():
         try:
             app.logger.info(f"[CONVERTER] Starting safe transcode for {input_path}")
-            
+
             success = fast_remux_to_mp4(input_path, output_path)
-            
+
             if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                 if os.path.exists(input_path):
-                    try: os.remove(input_path)
-                    except Exception: pass
+                    try:
+                        os.remove(input_path)
+                    except Exception:
+                        pass
                 app.logger.info(f"[CONVERTER] Part transcoded successfully: {output_path}")
             else:
                 app.logger.error(f"[CONVERTER] Transcode failed for {input_path}")
@@ -229,6 +297,7 @@ def convert_part_task(app, input_path, output_path, rec_id):
         finally:
             with conversion_lock:
                 active_conversions.discard(input_path)
+
 
 def procesar_partes_inactivas(app, rec):
     """Identifica archivos .ts inactivos y evita duplicar tareas de conversión."""
@@ -261,29 +330,36 @@ def procesar_partes_inactivas(app, rec):
                         active_conversions.add(input_path)
                         executor.submit(convert_part_task, app, input_path, output_path, rec.id)
 
+
 def disparar_conversion(app, rec, *args, **kwargs):
     """Alias de compatibilidad para llamadas antiguas."""
     procesar_partes_inactivas(app, rec)
     return True
 
+
 def _actualizar_estado_global(app, rec_id):
     """Marca la grabación en BD como 'completed' solo si no hay grabaciones ni conversiones pendientes."""
     with app.app_context():
         rec = db.session.get(RecordingSchedule, rec_id)
-        if not rec: return
+        if not rec:
+            return
 
         save_path = "/app/config/recordings"
         prog = rec.program
         clean_title = "".join([c for c in prog.title if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
 
         remaining_ts = [f for f in os.listdir(save_path) if f.startswith(f"{clean_title}_{prog.id}") and f.endswith('.ts')]
-        
-        is_ffmpeg_active = any(f"prog_id:{prog.id}" in " ".join(p.info.get('cmdline') or []) 
-                               for p in psutil.process_iter(['cmdline']))
+
+        is_ffmpeg_active = any(
+            f"prog_id:{prog.id}" in " ".join(p.info.get('cmdline') or [])
+            for p in psutil.process_iter(['cmdline'])
+        )
 
         if not remaining_ts and not is_ffmpeg_active and rec.end_time <= datetime.now():
+            _cleanup_stream_watcher(prog.id)
             rec.status = 'completed'
             db.session.commit()
+
 
 def _kill_ffmpeg_for_program(program_id):
     """Detiene cualquier proceso FFmpeg activo para un programa."""
@@ -295,6 +371,7 @@ def _kill_ffmpeg_for_program(program_id):
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 
+
 def _get_random_online_channel(tv_channel_id):
     """Obtiene de forma aleatoria un canal de AceStream online disponible para evitar siempre el mismo enlace roto."""
     channels = AcestreamChannel.query.filter_by(tv_channel_id=tv_channel_id, status='active', is_online=True).all()
@@ -302,12 +379,13 @@ def _get_random_online_channel(tv_channel_id):
         return None
     return random.choice(channels)
 
+
 def process_recordings(app, single_program_id=None):
     """Motor principal de gestión de grabaciones."""
     with app.app_context():
         now = datetime.now()
         save_path = "/app/config/recordings"
-        
+
         if not os.path.exists(save_path):
             os.makedirs(save_path, exist_ok=True)
 
@@ -329,6 +407,7 @@ def process_recordings(app, single_program_id=None):
                         if not rec_entry or rec_entry.status not in ['recording', 'pending', 'retrying'] or rec_entry.end_time <= now:
                             app.logger.warning(f"[RECORDER] Stopping expired ffmpeg for program ID {found_id}")
                             proc.terminate()
+                            _cleanup_stream_watcher(found_id)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
 
@@ -340,27 +419,45 @@ def process_recordings(app, single_program_id=None):
         for rec in active_or_pending:
             prog = rec.program
             clean_title = "".join([c for c in prog.title if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
-            
+
             procesar_partes_inactivas(app, rec)
 
             if rec.end_time <= now:
                 _kill_ffmpeg_for_program(prog.id)
+                _cleanup_stream_watcher(prog.id)
                 procesar_partes_inactivas(app, rec)
                 continue
 
-            is_alive = any(f"prog_id:{rec.program_id}" in " ".join(p.info.get('cmdline') or []) 
-                           for p in psutil.process_iter(['cmdline']))
+            is_alive = any(
+                f"prog_id:{rec.program_id}" in " ".join(p.info.get('cmdline') or [])
+                for p in psutil.process_iter(['cmdline'])
+            )
 
             if rec.status == 'recording' and not is_alive:
                 app.logger.warning(f"[RECORDER] Connection lost for {prog.title}. Retrying...")
+                _cleanup_stream_watcher(prog.id)
                 rec.status = 'retrying'
                 rec.retry_start = datetime.now()
                 db.session.commit()
                 continue
 
+            if rec.status == 'recording' and is_alive:
+                with watchers_lock:
+                    watcher = stream_watchers.get(prog.id)
+                if watcher and watcher.should_abort_stream():
+                    app.logger.warning(
+                        f"[RECORDER] Severe stream errors detected for {prog.title} (ID:{prog.id}). Cutting stream to retry..."
+                    )
+                    _kill_ffmpeg_for_program(prog.id)
+                    _cleanup_stream_watcher(prog.id)
+                    rec.status = 'retrying'
+                    rec.retry_start = datetime.now()
+                    db.session.commit()
+                    continue
+
             if rec.status == 'retrying':
                 elapsed = (datetime.now() - rec.retry_start).total_seconds()
-                
+
                 # Buscamos si hay algún canal online disponible en este momento
                 tv_chan = TVChannel.query.filter_by(epg_id=prog.epg_channel.channel_xml_id).first()
                 ace_chan = _get_random_online_channel(tv_chan.id) if tv_chan else None
@@ -377,6 +474,7 @@ def process_recordings(app, single_program_id=None):
                         db.session.commit()
                         app.logger.warning(f"[RECORDER] Still no streams for {prog.title}. Keeping retry alive...")
                     else:
+                        _cleanup_stream_watcher(prog.id)
                         rec.status = 'failed'
                         db.session.commit()
                         app.logger.error(f"[RECORDER] Program {prog.title} ended while retrying. Marked as failed.")
@@ -393,38 +491,43 @@ def process_recordings(app, single_program_id=None):
 
         for rec in to_start:
             prog = rec.program
-            
+
             if rec.end_time <= now:
+                _cleanup_stream_watcher(prog.id)
                 rec.status = 'failed'
                 db.session.commit()
                 app.logger.warning(f"[RECORDER] Program {prog.title} expired while pending. Marked as failed.")
                 continue
 
-            already_recording = any(f"prog_id:{rec.program_id}" in " ".join(p.info.get('cmdline') or []) 
-                                    for p in psutil.process_iter(['cmdline']))
+            already_recording = any(
+                f"prog_id:{rec.program_id}" in " ".join(p.info.get('cmdline') or [])
+                for p in psutil.process_iter(['cmdline'])
+            )
             if already_recording:
                 rec.status = 'recording'
                 db.session.commit()
                 continue
 
             tv_chan = TVChannel.query.filter_by(epg_id=prog.epg_channel.channel_xml_id).first()
-            if not tv_chan: 
+            if not tv_chan:
+                _cleanup_stream_watcher(prog.id)
                 rec.status = 'failed'
                 db.session.commit()
                 continue
 
             ace_chan = _get_random_online_channel(tv_chan.id)
             if not ace_chan:
-                continue 
+                continue
 
             clean_title = "".join([c for c in prog.title if c.isalnum() or c in (' ', '_')]).strip().replace(' ', '_')
             existing_parts = [f for f in os.listdir(save_path) if f.startswith(f"{clean_title}_{prog.id}")]
-            
+
             part_suffix = f"_part{len(existing_parts) + 1}" if existing_parts else "_part1"
             filename = os.path.join(save_path, f"{clean_title}_{prog.id}{part_suffix}.ts")
-            
+
             duration = int((rec.end_time - now).total_seconds())
-            if duration <= 0: continue
+            if duration <= 0:
+                continue
 
             # Soporte inteligente para infohash (ih:) o Content ID tradicional
             if ace_chan.id.startswith('ih:'):
@@ -433,38 +536,53 @@ def process_recordings(app, single_program_id=None):
             else:
                 stream_url = f"{base_url}?id={ace_chan.id}"
 
+            _cleanup_stream_watcher(prog.id)
+            stderr_log_path = f"/tmp/ffmpeg_rec_{prog.id}_{part_suffix.lstrip('_')}.log"
+
             cmd = [
-                'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                'ffmpeg', '-y', '-hide_banner', '-loglevel', 'warning',
                 '-fflags', '+genpts+discardcorrupt',
                 '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1',
                 '-reconnect_delay_max', '5', '-rw_timeout', '15000000',
                 '-i', stream_url,
-                '-c', 'copy',                    
+                '-c', 'copy',
                 '-user_agent', f'prog_id:{prog.id}', filename
             ]
 
             try:
-                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                with open(stderr_log_path, "w", encoding="utf-8") as stderr_file:
+                    subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.DEVNULL,
+                        stderr=stderr_file,
+                        start_new_session=True,
+                    )
+                with watchers_lock:
+                    stream_watchers[prog.id] = StreamHealthWatcher(stderr_log_path)
                 rec.status = 'recording'
                 db.session.commit()
                 app.logger.info(f"[RECORDER] Started: {prog.title} ID:{prog.id} ({part_suffix}) using ace_id: {ace_chan.id}")
             except Exception as e:
+                _cleanup_stream_watcher(prog.id)
                 app.logger.error(f"Error starting recording for {prog.id}: {e}")
+
 
 def stop_recording_now(program_id):
     """Parada manual inmediata desde la UI."""
     from flask import current_app
     app = current_app._get_current_object()
-    
+
     with app.app_context():
         rec = RecordingSchedule.query.filter_by(program_id=program_id).first()
         if rec:
             rec.end_time = datetime.now()
             rec.status = 'completed'
             db.session.commit()
-            
+
             _kill_ffmpeg_for_program(program_id)
+            _cleanup_stream_watcher(program_id)
             procesar_partes_inactivas(app, rec)
+
 
 def start_recording_now(app, program_id):
     """Inicio manual inmediato."""
