@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import psutil
 import re
@@ -9,31 +10,201 @@ from datetime import datetime
 from app.extensions import db
 from app.models import RecordingSchedule, EPGProgram, TVChannel, AcestreamChannel, Setting
 
-# Pool de conversión limitado a 2 tareas simultáneas para no saturar la CPU/Disco
-executor = ThreadPoolExecutor(max_workers=2)
+# Pool de conversión limitado a 1 tareas simultáneas para no saturar la CPU/Disco
+executor = ThreadPoolExecutor(max_workers=1)
 
 # Conjunto y bloqueo para evitar conversiones simultáneas del mismo archivo
 active_conversions = set()
 conversion_lock = threading.Lock()
 
-def fast_remux_to_mp4(input_ts, output_mp4):
-    """
-    Transcodifica de forma segura a H.264/AAC estándar para evitar 
-    cualquier corrupción y errores de memoria.
-    """
+def _get_vaapi_device():
+    dri_dir = "/dev/dri"
+    if os.path.isdir(dri_dir):
+        render_nodes = sorted(
+            f for f in os.listdir(dri_dir)
+            if f.startswith("renderD") and os.path.exists(os.path.join(dri_dir, f))
+        )
+        if render_nodes:
+            return os.path.join(dri_dir, render_nodes[0])
+    return None
+
+
+def _get_v4l2_device():
+    if os.path.isdir("/dev"):
+        video_nodes = sorted(
+            f for f in os.listdir("/dev")
+            if f.startswith("video") and f[5:].isdigit() and os.path.exists(os.path.join("/dev", f))
+        )
+        if video_nodes:
+            return os.path.join("/dev", video_nodes[0])
+    return None
+
+
+def _has_nvidia_device():
+    if os.path.isdir("/dev"):
+        return any(
+            f.startswith("nvidia") and f[6:].isdigit() and os.path.exists(os.path.join("/dev", f))
+            for f in os.listdir("/dev")
+        )
+    return False
+
+
+def _resolve_hwaccel_mode():
+    mode = os.getenv("FFMPEG_HWACCEL", "auto").strip().lower()
+    if mode in ("vaapi", "rpi", "nvenc", "cpu"):
+        return mode
+    if _get_vaapi_device():
+        return "vaapi"
+    if _get_v4l2_device():
+        return "rpi"
+    if _has_nvidia_device():
+        return "nvenc"
+    return "cpu"
+
+
+def _build_ffmpeg_cmd(input_ts, output_mp4, mode="cpu"):
+    base_in = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-fflags", "+genpts+discardcorrupt",
+    ]
+    base_out = [
+        "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart",
+        output_mp4,
+    ]
+
+    if mode == "vaapi":
+        vaapi_dev = _get_vaapi_device()
+        if not vaapi_dev:
+            return None
+        return [
+            *base_in,
+            "-hwaccel", "vaapi",
+            "-hwaccel_device", vaapi_dev,
+            "-hwaccel_output_format", "vaapi",
+            "-i", input_ts,
+            "-vf", "scale_vaapi=format=nv12",
+            "-c:v", "h264_vaapi", "-qp", "23",
+            *base_out,
+        ]
+
+    if mode == "rpi":
+        return [
+            *base_in,
+            "-hwaccel", "drm",
+            "-i", input_ts,
+            "-c:v", "h264_v4l2m2m", "-b:v", "4M", "-pix_fmt", "yuv420p",
+            *base_out,
+        ]
+
+    if mode == "nvenc":
+        return [
+            *base_in,
+            "-hwaccel", "cuda",
+            "-hwaccel_output_format", "cuda",
+            "-i", input_ts,
+            "-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23", "-pix_fmt", "yuv420p",
+            *base_out,
+        ]
+
+    return [
+        *base_in,
+        "-i", input_ts,
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-pix_fmt", "yuv420p", "-profile:v", "main",
+        *base_out,
+    ]
+
+
+def _probe_media_streams(input_ts):
     cmd = [
-        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-        '-fflags', '+genpts+discardcorrupt',
-        '-i', input_ts,
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23',
-        '-pix_fmt', 'yuv420p',
-        '-profile:v', 'main',
-        '-c:a', 'aac', '-b:a', '192k',
-        '-movflags', '+faststart',
-        output_mp4
+        "ffprobe", "-v", "error",
+        "-print_format", "json",
+        "-show_streams",
+        input_ts,
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=False)
+        if res.returncode != 0 or not res.stdout:
+            return None
+        data = json.loads(res.stdout)
+        streams = data.get("streams") or []
+
+        video_stream = next((s for s in streams if s.get("codec_type") == "video"), None)
+        audio_stream = next((s for s in streams if s.get("codec_type") == "audio"), None)
+
+        video_ok = bool(
+            video_stream
+            and video_stream.get("codec_name") == "h264"
+            and video_stream.get("pix_fmt") == "yuv420p"
+        )
+        audio_ok = bool(
+            audio_stream
+            and audio_stream.get("codec_name") in ("aac", "mp3")
+        )
+        return {
+            "video_ok": video_ok,
+            "audio_ok": audio_ok,
+            "has_audio": audio_stream is not None,
+        }
+    except Exception:
+        return None
+
+
+def _try_smart_remux(input_ts, output_mp4, probe_info):
+    if not probe_info or not probe_info.get("video_ok"):
+        return False
+
+    video_args = ["-c:v", "copy"]
+    if not probe_info.get("has_audio"):
+        audio_args = []
+    elif probe_info.get("audio_ok"):
+        audio_args = ["-c:a", "copy"]
+    else:
+        audio_args = ["-c:a", "aac", "-b:a", "192k"]
+
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-fflags", "+genpts+discardcorrupt",
+        "-i", input_ts,
+        *video_args,
+        *audio_args,
+        "-movflags", "+faststart",
+        output_mp4,
     ]
     res = subprocess.run(cmd, check=False)
-    return res.returncode == 0
+    return (
+        res.returncode == 0
+        and os.path.exists(output_mp4)
+        and os.path.getsize(output_mp4) > 0
+    )
+
+
+def fast_remux_to_mp4(input_ts, output_mp4):
+    probe_info = _probe_media_streams(input_ts)
+    if _try_smart_remux(input_ts, output_mp4, probe_info):
+        return True
+
+    if os.path.exists(output_mp4):
+        try:
+            os.remove(output_mp4)
+        except Exception:
+            pass
+
+    mode = _resolve_hwaccel_mode()
+    cmd = _build_ffmpeg_cmd(input_ts, output_mp4, mode=mode)
+
+    if cmd is not None:
+        res = subprocess.run(cmd, check=False)
+        if res.returncode == 0 and os.path.exists(output_mp4) and os.path.getsize(output_mp4) > 0:
+            return True
+
+    if mode != "cpu":
+        cmd_cpu = _build_ffmpeg_cmd(input_ts, output_mp4, mode="cpu")
+        res_cpu = subprocess.run(cmd_cpu, check=False)
+        return res_cpu.returncode == 0 and os.path.exists(output_mp4) and os.path.getsize(output_mp4) > 0
+
+    return False
 
 def convert_part_task(app, input_path, output_path, rec_id):
     """Tarea ejecutada en la cola de trabajo con control de exclusión."""

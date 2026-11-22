@@ -96,7 +96,7 @@ FROM python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.4"
+      version="2.5"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -121,7 +121,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl gnupg gcc python3-dev build-essential \
     tor \
     wireguard-tools iproute2 \
-    openresolv logrotate cron ffmpeg \
+    openresolv logrotate cron ffmpeg va-driver-all \
     && rm -rf /var/lib/apt/lists/*
 
 # Configuración de TOR
@@ -162,6 +162,7 @@ RUN apt-get clean && \
 ENV DOCKER_ENV=true
 ENV TZ='Europe/Madrid'
 ENV ENABLE_TOR=false
+ENV FFMPEG_HWACCEL=auto
 ENV WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
 ENV WG_THREADS=4
 ENV ENABLE_WARP=false
@@ -182,7 +183,7 @@ COPY --from=builder-outpace /tmp/licenses_outpace/ /licenses/
 COPY --from=builder-kubo /tmp/licenses_kubo/ /licenses/
 
 LABEL description="Acestream channel scraper with Outpace and ZeroNet support" \
-      version="2.4"
+      version="2.5"
 
 # Copiar archivos de la aplicación y scripts de control
 COPY --chmod=0755 entrypoint.sh /app/entrypoint.sh

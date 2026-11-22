@@ -9,6 +9,8 @@ services:
     privileged: true
     devices:
       - /dev/net/tun:/dev/net/tun
+      # Uncomment ARM64/ARMv7:
+      # - /dev/videoX:/dev/videoX
     cap_add:
       - NET_ADMIN
       - SYS_MODULE

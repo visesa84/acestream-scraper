@@ -37,7 +37,7 @@ Back up the mounted directories before upgrades or database maintenance.
 
 ## Services and ports
 
-The current entrypoint runs the Flask/Gunicorn app on `FLASK_PORT` (default `8040`), Outpace on `6878` and `6879`, and ZeroNet. The Outpace peer listeners use `8621` and `8622`. When `ENABLE_ACESTREAM_SEARCH=true`, the bundled search engine uses HTTP port `6880` and P2P port `8625`. When `ENABLE_IPFS=true`, Kubo is started with its lowpower profile; its node data is stored in `/app/config/ipfs`, alongside the rest of the persistent configuration. ZeroNet uses `43110` (UI), `43111`, and `26552`.
+The current entrypoint runs the Flask/Gunicorn app on `FLASK_PORT` (default `8040`), Outpace on `6878` and `6879`, and ZeroNet. The Outpace peer listeners use `8621` and `8622`. When `ENABLE_IPFS=true`, Kubo is started with its lowpower profile; its node data is stored in `/app/config/ipfs`, alongside the rest of the persistent configuration. ZeroNet uses `43110` (UI), `43111`, and `26552`.
 
 Kubo is obtained from the latest GitHub release during image build for the target Linux architecture. ARMv7 currently has no prebuilt release asset, so that image compiles the same release from its GitHub source archive. At startup it is configured for DHT client routing, a 512 KiB Bloom filter, two Go scheduler threads, and connection manager thresholds of 20 peers (low-water) and 40 peers (high-water). It is disabled by default; set `ENABLE_IPFS=true` in Compose to enable it.
 

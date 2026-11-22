@@ -28,9 +28,8 @@ These are the main environment variables defined or consumed by the current Dock
 | `TZ` | `Europe/Madrid` | Container timezone |
 | `ENABLE_TOR` | `false` | Starts the Tor service |
 | `ENABLE_WARP` | `false` | Runs WARP initialization |
-| `ENABLE_ACESTREAM_SEARCH` | `true` | Starts the bundled search engine (`6880` HTTP, `8625` P2P) |
 | `ENABLE_IPFS` | `false` | Starts Kubo IPFS with the lowpower profile |
-| `CHECKSTATUS_ENABLED` | unset | When set, overrides the stored status-check setting |
+| `FFMPEG_HWACCEL` | `auto` | Auto-detect hardware video encoder with CPU fallback (`auto`, `rpi`, `vaapi`, `nvenc`, `cpu`) |
 | `WARP_LICENSE_KEY` | empty | Optional WARP license key |
 | `WG_QUICK_USERSPACE_IMPLEMENTATION` | `boringtun` | WireGuard userspace implementation |
 | `WG_THREADS` | `4` | WireGuard worker count |

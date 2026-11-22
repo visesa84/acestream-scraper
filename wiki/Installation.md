@@ -28,7 +28,7 @@ docker run -d --name acestream-scraper `
   -p 8040:8040 `
   -v "${PWD}/config:/app/config" `
   -v "${PWD}/recordings:/app/config/recordings" `
-  visesa84/acestream-scraper-pyacexy:latest
+  visesa84/acestream-scraper-outpace:latest
 ```
 
 This minimal command does not publish the P2P, ZeroNet, or optional search ports and does not grant WARP's required network privileges. For the full port and permission setup, use the checked-in `docker-compose.yml`.

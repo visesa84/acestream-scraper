@@ -37,12 +37,25 @@ services:
       - SYS_ADMIN
     devices:
       - /dev/net/tun:/dev/net/tun
+	  # Uncomment ARM64/ARMv7:
+      # - /dev/videoX:/dev/videoX
+      # Uncomment for Intel/AMD (x64):
+      # - /dev/dri:/dev/dri
+      # Uncomment for NVIDIA GPU hardware acceleration (requires nvidia-container-toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu, video]
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv4.ip_forward=1
     environment:
       - TZ='Europe/Madrid'
       - ENABLE_TOR=false
+	  - FFMPEG_HWACCEL=auto
       - WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
       - WG_THREADS=4
       - ENABLE_WARP=false
@@ -97,7 +110,8 @@ Frequently used image environment variables:
 | `WG_QUICK_USERSPACE_IMPLEMENTATION` | `boringtun` | Use the boringtun module to process encrypted VPN traffic |
 | `WG_THREADS` | `4` | Number of CPU threads in parallel for boringtun |
 | `ENABLE_IPFS` | `true` | Start Kubo IPFS using the lowpower profile |
-| `CHECKSTATUS_ENABLED` | application setting | Enable automatic stream checks |
+| `FFMPEG_HWACCEL` | `auto` | Auto-detect hardware video encoder with CPU fallback (`auto`, `rpi`, `vaapi`, `nvenc`, `cpu`) |
+
 
 Application settings such as the playlist base URL, rescrape/check intervals, EPG refresh interval, and stream mode can be managed in the web UI. See [Configuration](./wiki/Configuration.md).
 

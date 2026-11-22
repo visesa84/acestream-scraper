@@ -101,7 +101,7 @@ FROM --platform=linux/arm64 python:3.10-slim AS base
 
 LABEL maintainer="visesa" \
       description="Acestream channel scraper with ZeroNet support" \
-      version="2.4"
+      version="2.5"
 
 WORKDIR /app
 RUN mkdir -p /app/config
@@ -122,7 +122,7 @@ COPY --from=builder-kubo /usr/local/bin/ipfs /usr/local/bin/ipfs
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl gnupg gcc python3-dev build-essential \
     tor ca-certificates \
-    wireguard-tools iproute2 ffmpeg openresolv unzip binutils \
+    wireguard-tools iproute2 ffmpeg v4l-utils openresolv unzip binutils \
     libssl-dev libffi-dev logrotate cron \
     libsecp256k1-dev libtool autoconf automake pkg-config \
     && rm -rf /var/lib/apt/lists/*
@@ -173,6 +173,7 @@ COPY --chmod=0755 arm/arm64/wgcf /usr/local/bin/wgcf
 ENV DOCKER_ENV=true
 ENV TZ='Europe/Madrid'
 ENV ENABLE_TOR=false
+ENV FFMPEG_HWACCEL=auto
 ENV WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
 ENV WG_THREADS=4
 ENV ENABLE_WARP=false
